@@ -192,13 +192,15 @@ function createWindow() {
 	// Anything that is not our own scheme is a real external link (Wowhead, GitHub, Discord)
 	// and belongs in the user's actual browser, not in this window.
 	mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-		if (!url.startsWith(ORIGIN)) shell.openExternal(url);
+		if (url.startsWith('http://') || url.startsWith('https://')) shell.openExternal(url);
 		return { action: 'deny' };
 	});
 	mainWindow.webContents.on('will-navigate', (event, url) => {
 		if (!url.startsWith(ORIGIN)) {
 			event.preventDefault();
-			shell.openExternal(url);
+			// Only hand real web links to the OS browser. Internal schemes (devtools:,
+			// chrome:) would otherwise be shoved at it too, which does nothing useful.
+			if (url.startsWith('http://') || url.startsWith('https://')) shell.openExternal(url);
 		}
 	});
 
@@ -238,6 +240,15 @@ ipcMain.handle('wowsims:start-update', async () => {
 	await autoUpdater.downloadUpdate();
 	return { downloading: true };
 });
+
+// chrome://gpu cannot be opened in this window, so expose the same underlying data to
+// DevTools instead. Whether the GPU is actually compositing is the first thing to check
+// when the UI feels less smooth than the same page in a browser.
+ipcMain.handle('wowsims:gpu-status', () => ({
+	featureStatus: app.getGPUFeatureStatus(),
+	// Electron's default is hardware accelerated; this is here to prove nothing turned it off.
+	hardwareAccelerationDisabled: app.commandLine.hasSwitch('disable-gpu'),
+}));
 
 ipcMain.handle('wowsims:install-update', () => {
 	app.isQuitting = true;

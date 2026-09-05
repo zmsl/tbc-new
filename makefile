@@ -216,13 +216,19 @@ ifneq ($(VERSION),)
 	cd $(DESKTOP_DIR) && npm version --no-git-tag-version --allow-same-version $(patsubst v%,%,$(VERSION))
 endif
 
+# Desktop-only: swap the cdnjs Font Awesome link for a bundled copy, in the embedded client
+# tree. The web sources keep the CDN link untouched, so the site is unaffected.
+.PHONY: desktop-bundle-fonts
+desktop-bundle-fonts: $(DESKTOP_DIR)/node_modules
+	node tools/desktop/bundle_fonts.mjs binary_dist/tbc
+
 .PHONY: desktop-sidecar-win
-desktop-sidecar-win: binary_dist binary_dist/dist.go
+desktop-sidecar-win: binary_dist binary_dist/dist.go desktop-bundle-fonts
 	mkdir -p $(DESKTOP_SIDECAR)
 	GOOS=windows GOARCH=amd64 GOAMD64=v2 go build -o $(DESKTOP_SIDECAR)/wowsimtbc-x64.exe -ldflags="$(DESKTOP_LDFLAGS)" ./sim/web/main.go
 
 .PHONY: desktop-sidecar-mac
-desktop-sidecar-mac: binary_dist binary_dist/dist.go
+desktop-sidecar-mac: binary_dist binary_dist/dist.go desktop-bundle-fonts
 	mkdir -p $(DESKTOP_SIDECAR)
 	GOOS=darwin GOARCH=amd64 GOAMD64=v2 go build -o $(DESKTOP_SIDECAR)/wowsimtbc-x64   -ldflags="$(DESKTOP_LDFLAGS)" ./sim/web/main.go
 	GOOS=darwin GOARCH=arm64                go build -o $(DESKTOP_SIDECAR)/wowsimtbc-arm64 -ldflags="$(DESKTOP_LDFLAGS)" ./sim/web/main.go

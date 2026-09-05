@@ -24,6 +24,8 @@ export interface DesktopBridge {
 	onUpdateProgress: (callback: (percent: number) => void) => () => void;
 	onUpdateReady: (callback: () => void) => () => void;
 	onUpdateError: (callback: (message: string) => void) => () => void;
+	// Chromium's GPU feature status, as chrome://gpu reports it.
+	getGpuStatus: () => Promise<{ featureStatus: Record<string, string>; hardwareAccelerationDisabled: boolean }>;
 	startUpdate: () => Promise<DesktopStartUpdateResult>;
 	installUpdate: () => Promise<void>;
 }

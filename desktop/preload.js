@@ -23,6 +23,11 @@ contextBridge.exposeInMainWorld('wowsimsDesktop', {
 	onUpdateReady: callback => on('wowsims:update-ready', callback),
 	onUpdateError: callback => on('wowsims:update-error', callback),
 
+	// Chromium's GPU feature status, the same data chrome://gpu shows. Check this from
+	// DevTools when the UI feels sluggish: "gpu_compositing" and "rasterization" should
+	// say "enabled", not "disabled_software".
+	getGpuStatus: () => ipcRenderer.invoke('wowsims:gpu-status'),
+
 	// Begins the download. Resolves `{ openedExternally: true }` when the platform cannot
 	// self-update and the release page was opened in the browser instead.
 	startUpdate: () => ipcRenderer.invoke('wowsims:start-update'),
