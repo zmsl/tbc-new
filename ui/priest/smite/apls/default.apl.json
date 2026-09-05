@@ -1,0 +1,50 @@
+{
+	"type": "TypeAPL",
+	"prepullActions": [
+		{ "action": { "castSpell": { "spellId": { "spellId": 25384 } } }, "doAtValue": { "variableRef": { "name": "PrePull" } } }
+	],
+	"priorityList": [
+		{ "action": { "autocastOtherCooldowns": {} } },
+		{
+			"action": {
+				"condition": { "variableRef": { "name": "Undead" } },
+				"castSpell": { "spellId": { "spellId": 25467 } }
+			}
+		},
+		{
+			"action": {
+				"condition": { "variableRef": { "name": "Night Elf" } },
+				"castSpell": { "spellId": { "spellId": 25446 } }
+			}
+		},
+		{
+			"action": {
+				"condition": { "not": { "val": { "dotIsActive": { "spellId": { "spellId": 25368 } } } } },
+				"castSpell": { "spellId": { "spellId": 25368 } }
+			}
+		},
+		{
+			"action": {
+				"condition": {
+					"cmp": {
+						"op": "OpLt",
+						"lhs": { "dotRemainingTime": { "spellId": { "spellId": 25384 } } },
+						"rhs": { "spellCastTime": { "spellId": { "spellId": 25384 } } }
+					}
+				},
+				"castSpell": { "spellId": { "spellId": 25384 } }
+			}
+		},
+		{ "action": { "castSpell": { "spellId": { "spellId": 25364 } } } }
+	],
+	"valueVariables": [
+		{ "name": "Night Elf", "value": { "spellIsKnown": { "spellId": { "spellId": 25446 } } } },
+		{ "name": "Undead", "value": { "spellIsKnown": { "spellId": { "spellId": 25467 } } } },
+		{
+			"name": "PrePull",
+			"value": {
+				"math": { "op": "OpSub", "lhs": { "const": { "val": "0s" } }, "rhs": { "spellCastTime": { "spellId": { "spellId": 25384 } } } }
+			}
+		}
+	]
+}

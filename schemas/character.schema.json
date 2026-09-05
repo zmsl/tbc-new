@@ -96,12 +96,15 @@
 				"priest": {
 					"type": "object",
 					"properties": {
-						"priest": {
+						"dps": {
+							"type": "string"
+						},
+						"smite": {
 							"type": "string"
 						}
 					},
 					"additionalProperties": false,
-					"required": ["priest"]
+					"required": ["dps", "smite"]
 				},
 				"rogue": {
 					"type": "object",

@@ -233,7 +233,8 @@ export const specI18nKeys: Record<Spec, string> = {
 	[Spec.SpecProtectionPaladin]: 'protection',
 	[Spec.SpecRetributionPaladin]: 'retribution',
 	// Priest
-	[Spec.SpecPriest]: 'priest',
+	[Spec.SpecPriest]: 'dps',
+	[Spec.SpecSmitePriest]: 'smite',
 	// Rogue
 	[Spec.SpecRogue]: 'rogue',
 	// Shaman
