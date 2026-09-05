@@ -1,3 +1,4 @@
+import { Phase } from '../../core/constants/other';
 import * as PresetUtils from '../../core/preset_utils';
 import { ConsumesSpec, Debuffs, Drums, IndividualBuffs, PartyBuffs, Profession, PseudoStat, RaidBuffs, Stat, TristateEffect } from '../../core/proto/common';
 import { SmitePriest_Options as Options } from '../../core/proto/priest';
@@ -6,35 +7,62 @@ import { Stats } from '../../core/proto_utils/stats';
 import { defaultImprovedShadowBoltSettings, defaultRaidBuffMajorDamageCooldowns } from '../../core/proto_utils/utils';
 import DefaultApl from './apls/default.apl.json';
 import P1Gear from './gear_sets/p1.gear.json';
+import P2Gear from './gear_sets/p2.gear.json';
 import P3Gear from './gear_sets/p3.gear.json';
+import P4Gear from './gear_sets/p4.gear.json';
+import P5Gear from './gear_sets/p5.gear.json';
 import PreRaidGear from './gear_sets/pre_raid.gear.json';
 
-// A smite priest wears the same spell-damage cloth as any other caster; the shadow tier
-// bonuses it happens to carry simply do nothing for Holy Fire and Smite.
-export const PRE_RAID_PRESET = PresetUtils.makePresetGear('Pre Raid Preset', PreRaidGear);
-export const P1_PRESET = PresetUtils.makePresetGear('P1 Preset', P1Gear);
-export const P3_PRESET = PresetUtils.makePresetGear('P3 Preset', P3Gear);
+// Built by simming rather than copied from a guide: no smite-specific BiS list exists, and the
+// shadow ones are full of +shadow damage that does nothing here. Every slot was chosen by
+// running the sim over that phase's top EP candidates and keeping whatever measured best, so
+// on-use and proc trinkets are valued by what they actually do. Assumes Enchanting + Tailoring.
+export const PRE_RAID_PRESET = PresetUtils.makePresetGear('Pre Raid Preset', PreRaidGear, { phase: Phase.Phase1 });
+export const P1_PRESET = PresetUtils.makePresetGear('P1 Preset', P1Gear, { phase: Phase.Phase1 });
+export const P2_PRESET = PresetUtils.makePresetGear('P2 Preset', P2Gear, { phase: Phase.Phase2 });
+export const P3_PRESET = PresetUtils.makePresetGear('P3 Preset', P3Gear, { phase: Phase.Phase3 });
+export const P4_PRESET = PresetUtils.makePresetGear('P4 Preset', P4Gear, { phase: Phase.Phase4 });
+export const P5_PRESET = PresetUtils.makePresetGear('P5 Preset', P5Gear, { phase: Phase.Phase5 });
 
 export const ROTATION_PRESET_DEFAULT = PresetUtils.makePresetAPLRotation('Default', DefaultApl);
 
-// Starting weights only -- resim to refine. Spirit is unusually strong here because
-// Spiritual Guidance turns 25% of it into spell damage, and crit carries extra value
-// because every crit can roll a Surge of Light proc.
+// Measured by the sim's own stat-weight run on the matching gear set, normalised to spell
+// damage. Haste leads once Shadowfiend keeps the mana bar afloat; before that, hit and the
+// regen stats are worth far more, which is why the two sets differ so much.
+export const PRE_RAID_EP_PRESET = PresetUtils.makePresetEpWeights(
+	'Pre-Raid',
+	Stats.fromMap(
+		{
+			[Stat.StatIntellect]: 0.66,
+			[Stat.StatSpirit]: 0.68,
+			[Stat.StatSpellDamage]: 1.0,
+			[Stat.StatHolyDamage]: 0.85,
+			[Stat.StatSpellHitRating]: 0.79,
+			[Stat.StatSpellCritRating]: 0.54,
+			[Stat.StatSpellHasteRating]: 1.52,
+			[Stat.StatMP5]: 0.42,
+		},
+		{
+			[PseudoStat.PseudoStatSchoolHitPercentHoly]: 0.79,
+		},
+	),
+);
+
 export const P3_EP_PRESET = PresetUtils.makePresetEpWeights(
 	'P3',
 	Stats.fromMap(
 		{
-			[Stat.StatIntellect]: 0.06,
-			[Stat.StatSpirit]: 0.3,
+			[Stat.StatIntellect]: 0.05,
+			[Stat.StatSpirit]: 0.34,
 			[Stat.StatSpellDamage]: 1.0,
-			[Stat.StatHolyDamage]: 1.0,
-			[Stat.StatSpellHitRating]: 1.35,
-			[Stat.StatSpellCritRating]: 0.4,
-			[Stat.StatSpellHasteRating]: 0.88,
-			[Stat.StatMP5]: 0.05,
+			[Stat.StatHolyDamage]: 0.87,
+			[Stat.StatSpellHitRating]: 0.29,
+			[Stat.StatSpellCritRating]: 0.22,
+			[Stat.StatSpellHasteRating]: 1.61,
+			[Stat.StatMP5]: 0.17,
 		},
 		{
-			[PseudoStat.PseudoStatSchoolHitPercentHoly]: 1.41,
+			[PseudoStat.PseudoStatSchoolHitPercentHoly]: 0.29,
 		},
 	),
 );

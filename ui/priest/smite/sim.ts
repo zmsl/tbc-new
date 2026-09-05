@@ -1,5 +1,5 @@
-import { ReforgeOptimizer } from '../../core/components/suggest_reforges_action';
 import * as OtherInputs from '../../core/components/inputs/other_inputs';
+import { ReforgeOptimizer } from '../../core/components/suggest_reforges_action';
 import { IndividualSimUI, registerSpecConfig } from '../../core/individual_sim_ui';
 import { Player } from '../../core/player';
 import { PlayerClasses } from '../../core/player_classes';
@@ -102,12 +102,12 @@ const SPEC_CONFIG = registerSpecConfig(Spec.SpecSmitePriest, {
 	},
 
 	presets: {
-		epWeights: [Presets.P3_EP_PRESET],
+		epWeights: [Presets.PRE_RAID_EP_PRESET, Presets.P3_EP_PRESET],
 		// Preset talents that the user can quickly select.
 		talents: [Presets.StandardTalents],
 		rotations: [Presets.ROTATION_PRESET_DEFAULT],
 		// Preset gear configurations that the user can quickly select.
-		gear: [Presets.PRE_RAID_PRESET, Presets.P1_PRESET, Presets.P3_PRESET],
+		gear: [Presets.PRE_RAID_PRESET, Presets.P1_PRESET, Presets.P2_PRESET, Presets.P3_PRESET, Presets.P4_PRESET, Presets.P5_PRESET],
 		itemSwaps: [],
 		builds: [],
 	},

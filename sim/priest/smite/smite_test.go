@@ -39,6 +39,7 @@ func TestSmitePriest(t *testing.T) {
 			GearSet: core.GetGearSet("../../../ui/priest/smite/gear_sets", "pre_raid"),
 			OtherGearSets: []core.GearSetCombo{
 				core.GetGearSet("../../../ui/priest/smite/gear_sets", "p3"),
+				core.GetGearSet("../../../ui/priest/smite/gear_sets", "p5"),
 			},
 
 			Talents: defaultTalents,
@@ -65,6 +66,18 @@ func TestSmitePriest(t *testing.T) {
 				// Blacklist melee enchants that appear on cloth-relevant slots but
 				// are never used by casters.
 				EnchantBlacklist: []int32{2673, 3225, 3273},
+			},
+
+			EPReferenceStat: proto.Stat_StatSpellDamage,
+			StatsToWeigh: []proto.Stat{
+				proto.Stat_StatIntellect,
+				proto.Stat_StatSpirit,
+				proto.Stat_StatSpellDamage,
+				proto.Stat_StatHolyDamage,
+				proto.Stat_StatSpellHitRating,
+				proto.Stat_StatSpellCritRating,
+				proto.Stat_StatSpellHasteRating,
+				proto.Stat_StatMP5,
 			},
 		},
 	}))
