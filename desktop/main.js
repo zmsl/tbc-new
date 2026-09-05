@@ -173,6 +173,12 @@ function createWindow() {
 			contextIsolation: true,
 			nodeIntegration: false,
 			sandbox: true,
+			// Chromium throttles timers hard in hidden windows. The sim itself is unaffected
+			// -- it runs in the Go process -- but ui/worker/worker_http.ts polls
+			// /asyncProgress on a 500ms setTimeout, so a throttled window would sit there
+			// looking stalled and only notice the run finished once you switched back.
+			// Alt-tabbing away during a long sim is the normal thing to do here.
+			backgroundThrottling: false,
 		},
 	});
 
