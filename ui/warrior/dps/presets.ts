@@ -24,6 +24,7 @@ import PreraidFuryGear from './gear_sets/preraid_fury.gear.json';
 import P1FuryGear from './gear_sets/p1_fury.gear.json';
 import P2FuryGear from './gear_sets/p2_fury.gear.json';
 import P3FuryGear from './gear_sets/p3_fury.gear.json';
+import P3FuryT6Gear from './gear_sets/p3_fury_t6.gear.json';
 import P4FuryGear from './gear_sets/p4_fury.gear.json';
 import P5FuryGear from './gear_sets/p5_fury.gear.json';
 import { Phase } from '../../core/constants/other';
@@ -82,6 +83,7 @@ export const P1_PRERAID_FURY_PRESET = PresetUtils.makePresetGear('Preraid', Prer
 export const P1_BIS_FURY_PRESET = PresetUtils.makePresetGear('BIS', P1FuryGear, { phase: Phase.Phase1, ...FURY_PRESET_OPTIONS });
 export const P2_BIS_FURY_PRESET = PresetUtils.makePresetGear('BIS', P2FuryGear, { phase: Phase.Phase2, ...FURY_PRESET_OPTIONS });
 export const P3_BIS_FURY_PRESET = PresetUtils.makePresetGear('BIS', P3FuryGear, { phase: Phase.Phase3, ...FURY_PRESET_OPTIONS });
+export const P3_T6_FURY_PRESET = PresetUtils.makePresetGear('BIS - 4pc T6', P3FuryT6Gear, { phase: Phase.Phase3, ...FURY_PRESET_OPTIONS });
 export const P4_BIS_FURY_PRESET = PresetUtils.makePresetGear('BIS', P4FuryGear, { phase: Phase.Phase4, ...FURY_PRESET_OPTIONS });
 export const P5_BIS_FURY_PRESET = PresetUtils.makePresetGear('BIS', P5FuryGear, { phase: Phase.Phase5, ...FURY_PRESET_OPTIONS });
 
@@ -220,6 +222,7 @@ export const ArmsKebabTalents = {
 export const DefaultOptions = WarriorOptions.create({
 	classOptions: {
 		queueDelay: 250,
+		hsRageThreshold: 40,
 		startingRage: 50,
 		defaultShout: WarriorShout.WarriorShoutBattle,
 		defaultStance: WarriorStance.WarriorStanceBerserker,

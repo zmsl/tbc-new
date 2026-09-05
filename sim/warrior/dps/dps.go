@@ -46,6 +46,7 @@ func NewDpsWarrior(character *core.Character, options *proto.Player) *DpsWarrior
 			DefaultStance:         classOptions.DefaultStance,
 			StartingRage:          classOptions.StartingRage,
 			QueueDelay:            classOptions.QueueDelay,
+			HsRageThreshold:       classOptions.HsRageThreshold,
 			StanceSnapshot:        classOptions.StanceSnapshot,
 			HasBsSolarianSapphire: classOptions.HasBsSolarianSapphire,
 			HasBsT2:               classOptions.HasBsT2,

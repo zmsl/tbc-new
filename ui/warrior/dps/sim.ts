@@ -106,6 +106,8 @@ const SPEC_CONFIG = registerSpecConfig(Spec.SpecDpsWarrior, {
 			WarriorInputs.StanceSnapshot(),
 			OtherInputs.DistanceFromTarget,
 			WarriorInputs.QueueDelay(),
+			WarriorInputs.HsRageThreshold(),
+			WarriorInputs.CleaveRageThreshold(),
 			OtherInputs.InputDelay,
 			OtherInputs.TankAssignment,
 			OtherInputs.InFrontOfTarget,
@@ -129,6 +131,7 @@ const SPEC_CONFIG = registerSpecConfig(Spec.SpecDpsWarrior, {
 			Presets.P1_BIS_FURY_PRESET,
 			Presets.P2_BIS_FURY_PRESET,
 			Presets.P3_BIS_FURY_PRESET,
+			Presets.P3_T6_FURY_PRESET,
 			Presets.P4_BIS_FURY_PRESET,
 			Presets.P5_BIS_FURY_PRESET,
 			Presets.P1_PRERAID_ARMS_PRESET,
@@ -164,7 +167,15 @@ const SPEC_CONFIG = registerSpecConfig(Spec.SpecDpsWarrior, {
 	},
 
 	simpleRotation: (player: Player<Spec.SpecDpsWarrior>, simple: SpecRotation<Spec.SpecDpsWarrior>, _: Cooldowns): APLRotation => {
-		let { spec, sunderArmor = WarriorSunder.WarriorSunderHelp, useOverpower = true, useRecklessness = false, bloodlustTiming = 5 } = simple;
+		let {
+			spec,
+			sunderArmor = WarriorSunder.WarriorSunderHelp,
+			useOverpower = true,
+			useRecklessness = false,
+			bloodlustTiming = 5,
+			hsQueueCancel = false,
+			hsQueueCancelHsFallback = false,
+		} = simple;
 
 		if (!spec) {
 			if (Presets.isArmsSpec(player) || Presets.isArmsKebabSpec(player)) {
@@ -177,6 +188,19 @@ const SPEC_CONFIG = registerSpecConfig(Spec.SpecDpsWarrior, {
 		const rotation = APLRotation.clone(
 			spec == DpsWarriorSpec.DpsWarriorSpecFury ? Presets.FURY_DEFAULT_ROTATION.rotation.rotation! : Presets.ARMS_DEFAULT_ROTATION.rotation.rotation!,
 		);
+
+		// Single source of truth for "rage at which a queued on-next-swing is worth
+		// spending": the same settings drive these rotation conditions and the swing-time
+		// cancel check in the sim, so the two can't drift apart. Heroic Strike and Cleave
+		// are tracked separately because their damage per rage differs sharply.
+		const setThreshold = (name: string, value: number) => {
+			const variable = rotation.valueVariables.find(v => v.name === name);
+			if (variable && variable.value?.value.oneofKind === 'const') variable.value.value.const.val = String(value);
+		};
+		setThreshold('HS Rage Threshold', WarriorInputs.hsRageThreshold(player));
+		setThreshold('Cleave Rage Threshold', WarriorInputs.cleaveRageThreshold(player));
+		// Gates the Heroic Strike fallback to the band where Cleave cannot be queued.
+		setThreshold('Cleave Rage Cost', WarriorInputs.cleaveRageCost(player));
 
 		const bloodlustTimingVariable = rotation.valueVariables.find(variable => variable.name === 'Bloodlust time');
 		if (bloodlustTimingVariable && bloodlustTimingVariable.value?.value.oneofKind === 'const')
@@ -196,6 +220,20 @@ const SPEC_CONFIG = registerSpecConfig(Spec.SpecDpsWarrior, {
 			action => action.action?.action.oneofKind === 'groupReference' && action.action?.action.groupReference.groupName === 'Overpower Weaving',
 		);
 		if (opWeaveAction) opWeaveAction.hide = !useOverpower;
+
+		const hsQueueCancelAction = rotation.priorityList.find(
+			action => action.action?.action.oneofKind === 'groupReference' && action.action?.action.groupReference.groupName === 'HS Queue Cancel',
+		);
+		if (hsQueueCancelAction) hsQueueCancelAction.hide = !hsQueueCancel;
+
+		// Sits directly below the main cancel group, so Cleave is always tried first and
+		// this only fires in the rage band where Cleave cannot be queued at all.
+		const hsFallbackAction = rotation.priorityList.find(
+			action =>
+				action.action?.action.oneofKind === 'groupReference' &&
+				action.action?.action.groupReference.groupName === 'HS Queue Cancel: No Cleave Rage',
+		);
+		if (hsFallbackAction) hsFallbackAction.hide = !(hsQueueCancel && hsQueueCancelHsFallback);
 
 		return APLRotation.create({
 			simple: SimpleRotation.create({}),

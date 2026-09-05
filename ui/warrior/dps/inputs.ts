@@ -41,5 +41,19 @@ export const RotationInputs = {
 			showWhen: player => isFurySpec(player) || isArmsKebabSpec(player),
 			changeEmitter: player => TypedEvent.onAny([player.rotationChangeEmitter, player.talentsChangeEmitter, player.gearChangeEmitter]),
 		}),
+		InputHelpers.makeRotationBooleanInput<Spec.SpecDpsWarrior>({
+			fieldName: 'hsQueueCancel',
+			label: i18n.t('rotation_tab.options.warrior.dps.hs_queue_cancel.label'),
+			labelTooltip: i18n.t('rotation_tab.options.warrior.dps.hs_queue_cancel.tooltip'),
+			showWhen: player => isFurySpec(player),
+			changeEmitter: player => TypedEvent.onAny([player.rotationChangeEmitter, player.talentsChangeEmitter, player.gearChangeEmitter]),
+		}),
+		InputHelpers.makeRotationBooleanInput<Spec.SpecDpsWarrior>({
+			fieldName: 'hsQueueCancelHsFallback',
+			label: i18n.t('rotation_tab.options.warrior.dps.hs_queue_cancel_hs_fallback.label'),
+			labelTooltip: i18n.t('rotation_tab.options.warrior.dps.hs_queue_cancel_hs_fallback.tooltip'),
+			showWhen: player => isFurySpec(player) && player.getSimpleRotation().hsQueueCancel,
+			changeEmitter: player => TypedEvent.onAny([player.rotationChangeEmitter, player.talentsChangeEmitter, player.gearChangeEmitter]),
+		}),
 	],
 };

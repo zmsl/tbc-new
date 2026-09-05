@@ -570,6 +570,14 @@
 				"label": "HS/Cleave Queue Delay (ms)",
 				"tooltip": "How long (in milliseconds) to delay re-queueing Heroic Strike/Cleave in order to simulate real reaction time and game delay."
 			},
+			"hs_rage_threshold": {
+				"label": "Heroic Strike Rage Threshold",
+				"tooltip": "Rage at or above which a queued Heroic Strike is worth spending. Drives both the rotation's cast condition and, when queue canceling is enabled, the decision made as the main-hand swing lands. The amount above the ability's own rage cost is what is kept back for Bloodthirst and Whirlwind."
+			},
+			"cleave_rage_threshold": {
+				"label": "Cleave Rage Threshold",
+				"tooltip": "Same as the Heroic Strike threshold, but for Cleave. Leave blank to derive it from Cleave's own rage cost plus the same reserve the Heroic Strike threshold keeps back, so both abilities hold equal rage in hand. Both costs account for Improved Heroic Strike and Focused Rage."
+			},
 			"assume_bleed_active": {
 				"label": "Assume Bleed Always Active",
 				"tooltip": "Assume bleed always exists for 'Rend and Tear' calculations. Otherwise will only calculate based on own rip/rake/lacerate."
@@ -1938,6 +1946,14 @@
 					},
 					"use_overpower": {
 						"label": "Use Overpower"
+					},
+					"hs_queue_cancel": {
+						"label": "Cancel Heroic Strike Queue",
+						"tooltip": "Queue Heroic Strike/Cleave only to remove the dual wield miss penalty from off-hand swings, then drop the queue before the main-hand swing lands so the rage is never spent. A rage-starved technique: with plenty of rage it is better to simply Heroic Strike every swing. Extra attacks can still consume the queue before you react. Worth the most on a single target; the gain shrinks toward nothing once Cleave is soaking your rage."
+					},
+					"hs_queue_cancel_hs_fallback": {
+						"label": "Use Heroic Strike When Cleave Unaffordable",
+						"tooltip": "On multiple targets, when there is too little rage to even queue Cleave (20), hold the cheaper Heroic Strike queue (15, less Improved Heroic Strike) instead, purely for the off-hand accuracy. Strictly additive: it only applies in the rage band where no queue could be held at all, and never displaces a Cleave queue."
 					}
 				}
 			}
