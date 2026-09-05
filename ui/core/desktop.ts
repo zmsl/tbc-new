@@ -107,6 +107,10 @@ const MAC_TRAFFIC_LIGHT_WIDTH_PX = 78;
 // that edge swallows them, so the drag area is inset and the outer bar is not draggable.
 const RESIZE_EDGE_PX = 4;
 
+// Gap between the title strip and the page content. Painted in the page background, which
+// matches the strip, so it reads as a slightly taller bar rather than a visible band.
+const TITLEBAR_GAP_PX = 6;
+
 const TITLEBAR_CSS = `
 .wowsims-titlebar {
 	position: fixed;
@@ -181,10 +185,10 @@ html, body {
 /* Shifting this one element down keeps the sticky header directly beneath the title strip.
    Touching html/body heights instead would fight their height:100%. */
 .sim-ui {
-	margin-top: env(titlebar-area-height, ${TITLEBAR_HEIGHT_PX}px);
-	max-height: calc(100vh - env(titlebar-area-height, ${TITLEBAR_HEIGHT_PX}px));
+	margin-top: calc(env(titlebar-area-height, ${TITLEBAR_HEIGHT_PX}px) + ${TITLEBAR_GAP_PX}px);
+	max-height: calc(100vh - env(titlebar-area-height, ${TITLEBAR_HEIGHT_PX}px) - ${TITLEBAR_GAP_PX}px);
 }
-.sim-ui .sim-root { min-height: calc(100vh - env(titlebar-area-height, ${TITLEBAR_HEIGHT_PX}px)); }
+.sim-ui .sim-root { min-height: calc(100vh - env(titlebar-area-height, ${TITLEBAR_HEIGHT_PX}px) - ${TITLEBAR_GAP_PX}px); }
 `;
 
 // Set by the sim UI, which is the part that knows how to build a share link and show a
@@ -261,15 +265,19 @@ const installLocationTracking = (target: HTMLElement) => {
 		target.textContent = [spec, tab].filter(Boolean).join('  \u203a  ');
 	};
 
-	const tabs = document.querySelector('.sim-tabs');
-	if (tabs) {
-		// Scoped to the tab strip: a document-wide observer would fire constantly on a DOM
-		// this size.
-		new MutationObserver(update).observe(tabs, { attributes: true, attributeFilter: ['class'], subtree: true });
-	}
-	update();
-	// The sidebar title is built after this runs, so catch up once it exists.
-	setTimeout(update, 1000);
+	// The tabs use data-bs-toggle="tab", and Bootstrap's shown.bs.tab bubbles, so a document
+	// level listener catches every tab change. Binding to .sim-tabs directly does not work:
+	// installTitleBar runs as the first statement of the SimUI constructor, before the header
+	// exists, so the element is not there to observe yet.
+	document.addEventListener('shown.bs.tab', update);
+
+	// Same reason -- poll briefly for the sidebar title so the initial value is not blank.
+	let attempts = 0;
+	const seed = () => {
+		update();
+		if (++attempts < 40 && !document.querySelector('.sim-link-title')) setTimeout(seed, 100);
+	};
+	seed();
 };
 
 // The native menu has no idea what a sim is, so menu items just say what the user asked for
