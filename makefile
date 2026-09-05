@@ -28,6 +28,11 @@ $(OUT_DIR)/bundle/.dirstamp: \
   ui/core/proto/api.ts
 	node_modules/typescript/bin/tsc --noEmit
 	npx tsx vite.build-workers.mts
+# Vite hashes chunk filenames and never removes the previous build's, so the directory
+# accumulates orphans that nothing references and every packaging target then embeds. Clearing
+# it first took the sidecar binary from 88MB to 33MB. Only bundle/ is emptied: the rest of
+# $(OUT_DIR) holds assets and lib.wasm that make builds through separate rules.
+	rm -rf $(OUT_DIR)/bundle
 	npx vite build
 	touch $@
 
