@@ -16,10 +16,29 @@ type WarriorInputs struct {
 
 	StartingRage          float64
 	QueueDelay            int32
+	HsRageThreshold       float64
+	CleaveRageThreshold   float64
 	StanceSnapshot        bool
 	HasBsSolarianSapphire bool
 	HasBsT2               bool
 }
+
+const (
+	HeroicStrikeRageCost = 15.0
+	CleaveRageCost       = 20.0
+)
+
+// Applied when the options are unset, so settings saved before they existed, and
+// callers that don't set them, get sane values instead of a 0 threshold.
+//
+// Cleave's default is derived rather than picked: a threshold is really "how much rage
+// to keep back for Bloodthirst and Whirlwind", so the two abilities should leave the
+// same headroom after casting. Cleave costs more, so its threshold is higher by exactly
+// that difference.
+const (
+	DefaultHSRageThreshold     = 40.0
+	DefaultCleaveRageThreshold = DefaultHSRageThreshold + (CleaveRageCost - HeroicStrikeRageCost)
+)
 
 const (
 	SpellFlagBleed = core.SpellFlagAgentReserved1
@@ -120,6 +139,17 @@ type Warrior struct {
 	Cleave             *core.Spell
 	curQueueAura       *core.Aura
 	curQueuedAutoSpell *core.Spell
+	// Set when the active queue was made by a "queue and cancel" spell, which drops
+	// the queue right before the main hand swing instead of spending it.
+	curQueueWillCancel bool
+	// Rage threshold of whichever ability is currently queued, captured at queue time
+	// because Heroic Strike and Cleave use different ones.
+	curQueueThreshold float64
+	// A queue has been requested but its aura has not activated yet. Shared across
+	// Heroic Strike and Cleave: only one on-next-swing ability can be queued, so
+	// without this both can be queued in a single rotation pass whenever the queue
+	// delay is short enough that the aura has not landed yet.
+	queueIsPending bool
 
 	sharedMCD        *core.Timer // Recklessness, Shield Wall & Retaliation
 	sharedShoutsCD   *core.Timer
@@ -180,6 +210,9 @@ func (warrior *Warrior) Initialize() {
 func (warrior *Warrior) Reset(_ *core.Simulation) {
 	warrior.curQueueAura = nil
 	warrior.curQueuedAutoSpell = nil
+	warrior.curQueueWillCancel = false
+	warrior.curQueueThreshold = 0
+	warrior.queueIsPending = false
 
 	warrior.ChargeRageGain = 15
 	warrior.BerserkerRageRageGain = 0
@@ -211,6 +244,12 @@ func NewWarrior(character *core.Character, options *proto.WarriorOptions, talent
 		Character:     *character,
 		Talents:       &proto.WarriorTalents{},
 		WarriorInputs: inputs,
+	}
+	if warrior.WarriorInputs.HsRageThreshold <= 0 {
+		warrior.WarriorInputs.HsRageThreshold = DefaultHSRageThreshold
+	}
+	if warrior.WarriorInputs.CleaveRageThreshold <= 0 {
+		warrior.WarriorInputs.CleaveRageThreshold = DefaultCleaveRageThreshold
 	}
 	core.FillTalentsProto(warrior.Talents.ProtoReflect(), talents, TalentTreeSizes)
 

@@ -104,6 +104,13 @@ message WarriorOptions {
 	bool stance_snapshot = 5;
 	bool has_bs_solarian_sapphire = 6;
 	bool has_bs_t2 = 7;
+	// Rage at or above which a queued Heroic Strike is actually spent rather than
+	// cancelled. Shared by the rotation's cast condition and the swing-time check.
+	double hs_rage_threshold = 8;
+	// Same, for Cleave. Tracked separately because the two want different values:
+	// Cleave costs more but its damage per rage on multiple targets is far better,
+	// so it wants a lower threshold than Heroic Strike, not a higher one.
+	double cleave_rage_threshold = 9;
 }
 
 enum DpsWarriorSpec {
@@ -127,6 +134,11 @@ message DpsWarrior {
 		bool use_overpower = 4;
 		WarriorSunder sunder_armor = 5;
 		int32 bloodlust_timing = 6;
+		bool hs_queue_cancel = 7;
+		// On multiple targets, when there is too little rage to even queue Cleave, hold
+		// the 5 rage cheaper Heroic Strike queue instead. Strictly additive: it only
+		// fires where no queue could be held at all, and never displaces a Cleave queue.
+		bool hs_queue_cancel_hs_fallback = 8;
 	}
 
 	message Options {

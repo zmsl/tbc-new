@@ -23,10 +23,12 @@
 	{"action":{"castSpell":{"spellId":{"spellId":30335}}}},
 	{"action":{"condition":{"cmp":{"op":"OpGe","lhs":{"spellTimeToReady":{"spellId":{"spellId":30335}}},"rhs":{"const":{"val":"1.5s"}}}},"castSpell":{"spellId":{"spellId":1680,"tag":1}}}},
 	{"action":{"condition":{"isExecutePhase":{"threshold":"E20"}},"castSpell":{"spellId":{"spellId":25236}}}},
-	{"action":{"condition":{"and":{"vals":[{"cmp":{"op":"OpGt","lhs":{"numberTargets":{}},"rhs":{"const":{"val":"1"}}}},{"or":{"vals":[{"cmp":{"op":"OpGe","lhs":{"currentRage":{}},"rhs":{"const":{"val":"40"}}}}]}}]}},"castSpell":{"spellId":{"spellId":25231,"tag":1}}}},
+	{"action":{"condition":{"and":{"vals":[{"cmp":{"op":"OpGt","lhs":{"numberTargets":{}},"rhs":{"const":{"val":"1"}}}},{"or":{"vals":[{"cmp":{"op":"OpGe","lhs":{"currentRage":{}},"rhs":{"variableRef":{"name":"Cleave Rage Threshold"}}}}]}}]}},"castSpell":{"spellId":{"spellId":25231,"tag":1}}}},
 	{"action":{"groupReference":{"groupName":"Overpower Weaving"}}},
 	{"action":{"condition":{"and":{"vals":[{"auraIsInactive":{"auraId":{"spellId":2458}}},{"or":{"vals":[{"cmp":{"op":"OpLe","lhs":{"spellTimeToReady":{"spellId":{"spellId":30335}}},"rhs":{"inputDelay":{}}}},{"cmp":{"op":"OpLe","lhs":{"spellTimeToReady":{"spellId":{"spellId":1680,"tag":1}}},"rhs":{"inputDelay":{}}}}]}}]}},"castSpell":{"spellId":{"spellId":2458}}}},
-	{"action":{"condition":{"and":{"vals":[{"cmp":{"op":"OpEq","lhs":{"numberTargets":{}},"rhs":{"const":{"val":"1"}}}},{"not":{"val":{"isExecutePhase":{"threshold":"E20"}}}},{"cmp":{"op":"OpGe","lhs":{"currentRage":{}},"rhs":{"const":{"val":"40"}}}}]}},"castSpell":{"spellId":{"spellId":29707,"tag":1}}}},
+	{"action":{"condition":{"and":{"vals":[{"cmp":{"op":"OpEq","lhs":{"numberTargets":{}},"rhs":{"const":{"val":"1"}}}},{"not":{"val":{"isExecutePhase":{"threshold":"E20"}}}},{"cmp":{"op":"OpGe","lhs":{"currentRage":{}},"rhs":{"variableRef":{"name":"HS Rage Threshold"}}}}]}},"castSpell":{"spellId":{"spellId":29707,"tag":1}}}},
+	{"hide":true,"action":{"groupReference":{"groupName":"HS Queue Cancel"}}},
+	{"hide":true,"action":{"groupReference":{"groupName":"HS Queue Cancel: No Cleave Rage"}}},
 	{"action":{"condition":{"and":{"vals":[{"variableRef":{"name":"Delay Check"}},{"cmp":{"op":"OpGt","lhs":{"currentRage":{}},"rhs":{"const":{"val":"60"}}}}]}},"castSpell":{"spellId":{"spellId":25212}}}},
 	{"action":{"condition":{"cmp":{"op":"OpLt","lhs":{"currentRage":{}},"rhs":{"const":{"val":"90"}}}},"castSpell":{"spellId":{"spellId":2687}}}},
 	{"action":{"condition":{"and":{"vals":[{"variableRef":{"name":"Delay Check"}},{"or":{"vals":[{"auraIsKnown":{"auraId":{"spellId":20500,"tag":1}}},{"auraIsKnown":{"auraId":{"spellId":20500,"tag":2}}}]}}]}},"castSpell":{"spellId":{"spellId":18499}}}},
@@ -38,6 +40,8 @@
 	{"hide":true,"action":{"condition":{"const":{"val":"false"}},"castSpell":{"spellId":{"spellId":871}}}}
 	],
 	"groups": [
+	{"name":"HS Queue Cancel: No Cleave Rage","actions":[{"action":{"condition":{"and":{"vals":[{"cmp":{"op":"OpGt","lhs":{"numberTargets":{}},"rhs":{"const":{"val":"1"}}}},{"cmp":{"op":"OpLt","lhs":{"currentRage":{}},"rhs":{"variableRef":{"name":"Cleave Rage Cost"}}}}]}},"castSpell":{"spellId":{"spellId":29707,"tag":2}}}}]},
+	{"name":"HS Queue Cancel","actions":[{"action":{"condition":{"cmp":{"op":"OpEq","lhs":{"numberTargets":{}},"rhs":{"const":{"val":"1"}}}},"castSpell":{"spellId":{"spellId":29707,"tag":2}}}},{"action":{"condition":{"cmp":{"op":"OpGt","lhs":{"numberTargets":{}},"rhs":{"const":{"val":"1"}}}},"castSpell":{"spellId":{"spellId":25231,"tag":2}}}}]},
 	{"name":"Pre-pull: Move","actions":[{"action":{"condition":{"auraIsActive":{"auraId":{"spellId":2457}}},"castSpell":{"spellId":{"spellId":11578,"rank":3}}}},{"action":{"condition":{"auraIsActive":{"auraId":{"spellId":2458}}},"castSpell":{"spellId":{"spellId":25275,"rank":5}}}}]},
 	{"name":"Recklessness ON/OFF","actions":[{"action":{}}]},
 	{"name":"Bloodlust + Drums","actions":[{"action":{"castSpell":{"spellId":{"spellId":2825,"tag":-1}}}},{"action":{"castSpell":{"spellId":{"spellId":35476}}}},{"action":{"castSpell":{"spellId":{"spellId":35476,"tag":-1}}}}]},
@@ -48,6 +52,9 @@
 	{"name":"Overpower Weaving","actions":[{"action":{"condition":{"and":{"vals":[{"variableRef":{"name":"Overpower: Can Cast"}},{"cmp":{"op":"OpLe","lhs":{"gcdTimeToReady":{}},"rhs":{"const":{"val":"100ms"}}}}]}},"wait":{"duration":{"gcdTimeToReady":{}}}}},{"action":{"condition":{"and":{"vals":[{"variableRef":{"name":"Overpower: Can Cast"}},{"cmp":{"op":"OpEq","lhs":{"gcdTimeToReady":{}},"rhs":{"const":{"val":"0ms"}}}}]}},"castSpell":{"spellId":{"spellId":2457}}}},{"action":{"condition":{"auraIsActive":{"auraId":{"spellId":11585}}},"castSpell":{"spellId":{"spellId":11585}}}},{"action":{"condition":{"and":{"vals":[{"auraIsInactive":{"auraId":{"spellId":2458}}},{"not":{"val":{"spellIsReady":{"spellId":{"spellId":11585,"rank":4}}}}}]}},"castSpell":{"spellId":{"spellId":2458}}}}]}
 	],
 	"valueVariables": [
+	{"name":"Cleave Rage Cost","value":{"const":{"val":"20"}}},
+	{"name":"Cleave Rage Threshold","value":{"const":{"val":"45"}}},
+	{"name":"HS Rage Threshold","value":{"const":{"val":"40"}}},
 	{"name":"Bloodlust time","value":{"const":{"val":"5s"}}},
 	{"name":"Delay Check","value":{"and":{"vals":[{"cmp":{"op":"OpGe","lhs":{"spellTimeToReady":{"spellId":{"spellId":30335}}},"rhs":{"const":{"val":"1.5s"}}}},{"cmp":{"op":"OpGe","lhs":{"spellTimeToReady":{"spellId":{"spellId":1680,"tag":1}}},"rhs":{"const":{"val":"1.5s"}}}}]}}},
 	{"name":"Overpower: Can Cast","value":{"and":{"vals":[{"variableRef":{"name":"Delay Check"}},{"not":{"val":{"isExecutePhase":{"threshold":"E20"}}}},{"or":{"vals":[{"and":{"vals":[{"auraIsActive":{"auraId":{"spellId":11585},"includeReactionTime":true}},{"cmp":{"op":"OpGe","lhs":{"currentRage":{}},"rhs":{"const":{"val":"5"}}}},{"cmp":{"op":"OpLe","lhs":{"currentRage":{}},"rhs":{"const":{"val":"100"}}}}]}}]}}]}}}

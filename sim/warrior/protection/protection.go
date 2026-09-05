@@ -43,6 +43,7 @@ func NewProtectionWarrior(character *core.Character, options *proto.Player) *Pro
 			DefaultStance:         classOptions.DefaultStance,
 			StartingRage:          classOptions.StartingRage,
 			QueueDelay:            classOptions.QueueDelay,
+			HsRageThreshold:       classOptions.HsRageThreshold,
 			StanceSnapshot:        classOptions.StanceSnapshot,
 			HasBsSolarianSapphire: classOptions.HasBsSolarianSapphire,
 			HasBsT2:               classOptions.HasBsT2,

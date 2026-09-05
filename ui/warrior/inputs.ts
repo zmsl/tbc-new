@@ -49,6 +49,34 @@ export const QueueDelay = <SpecType extends WarriorSpecs>() =>
 		labelTooltip: i18n.t('settings_tab.other.queue_delay.tooltip'),
 	});
 
+// Mirrors warrior.DefaultHSRageThreshold in the sim. Both the sim and the rotation
+// substitute this when the option is unset, so settings saved before the option existed
+// keep behaving as they did. Shown in the picker so the number matches what is used.
+// Mirrors the constants of the same name in sim/warrior/warrior.go. Cleave's default is
+// derived so the two abilities leave the same rage headroom after casting.
+const HEROIC_STRIKE_RAGE_COST = 15;
+const CLEAVE_RAGE_COST = 20;
+export const DEFAULT_HS_RAGE_THRESHOLD = 40;
+export const DEFAULT_CLEAVE_RAGE_THRESHOLD = DEFAULT_HS_RAGE_THRESHOLD + (CLEAVE_RAGE_COST - HEROIC_STRIKE_RAGE_COST);
+
+export const HsRageThreshold = <SpecType extends WarriorSpecs>() =>
+	InputHelpers.makeClassOptionsNumberInput<SpecType>({
+		fieldName: 'hsRageThreshold',
+		label: i18n.t('settings_tab.other.hs_rage_threshold.label'),
+		labelTooltip: i18n.t('settings_tab.other.hs_rage_threshold.tooltip'),
+		positive: true,
+		getValue: player => player.getClassOptions().hsRageThreshold || DEFAULT_HS_RAGE_THRESHOLD,
+	});
+
+export const CleaveRageThreshold = <SpecType extends WarriorSpecs>() =>
+	InputHelpers.makeClassOptionsNumberInput<SpecType>({
+		fieldName: 'cleaveRageThreshold',
+		label: i18n.t('settings_tab.other.cleave_rage_threshold.label'),
+		labelTooltip: i18n.t('settings_tab.other.cleave_rage_threshold.tooltip'),
+		positive: true,
+		getValue: player => player.getClassOptions().cleaveRageThreshold || DEFAULT_CLEAVE_RAGE_THRESHOLD,
+	});
+
 export const BattleShoutSolarianSapphire = <SpecType extends WarriorSpecs>() =>
 	InputHelpers.makeClassOptionsBooleanIconInput<SpecType>({
 		fieldName: 'hasBsSolarianSapphire',

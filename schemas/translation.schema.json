@@ -1999,6 +1999,32 @@
 							"additionalProperties": false,
 							"required": ["label", "tooltip"]
 						},
+						"hs_rage_threshold": {
+							"type": "object",
+							"properties": {
+								"label": {
+									"type": "string"
+								},
+								"tooltip": {
+									"type": "string"
+								}
+							},
+							"additionalProperties": false,
+							"required": ["label", "tooltip"]
+						},
+						"cleave_rage_threshold": {
+							"type": "object",
+							"properties": {
+								"label": {
+									"type": "string"
+								},
+								"tooltip": {
+									"type": "string"
+								}
+							},
+							"additionalProperties": false,
+							"required": ["label", "tooltip"]
+						},
 						"assume_bleed_active": {
 							"type": "object",
 							"properties": {
@@ -2230,6 +2256,8 @@
 						"has_bs_solarian_sapphire",
 						"has_bs_tier_2",
 						"queue_delay",
+						"hs_rage_threshold",
+						"cleave_rage_threshold",
 						"assume_bleed_active",
 						"cannot_shred_target",
 						"okf_uptime",
@@ -6824,10 +6852,36 @@
 											},
 											"additionalProperties": false,
 											"required": ["label"]
+										},
+										"hs_queue_cancel": {
+											"type": "object",
+											"properties": {
+												"label": {
+													"type": "string"
+												},
+												"tooltip": {
+													"type": "string"
+												}
+											},
+											"additionalProperties": false,
+											"required": ["label", "tooltip"]
+										},
+										"hs_queue_cancel_hs_fallback": {
+											"type": "object",
+											"properties": {
+												"label": {
+													"type": "string"
+												},
+												"tooltip": {
+													"type": "string"
+												}
+											},
+											"additionalProperties": false,
+											"required": ["label", "tooltip"]
 										}
 									},
 									"additionalProperties": false,
-									"required": ["spec", "use_recklessness", "use_overpower"]
+									"required": ["spec", "use_recklessness", "use_overpower", "hs_queue_cancel", "hs_queue_cancel_hs_fallback"]
 								}
 							},
 							"additionalProperties": false,
