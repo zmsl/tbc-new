@@ -92,6 +92,15 @@ export const installFavoriteStars = (root: ParentNode) => {
 		if (row.dataset.favoriteStar) return;
 		const target = row.matches('a.sim-link[href]') ? (row as HTMLAnchorElement) : row.querySelector<HTMLAnchorElement>('a.sim-link[href]');
 		if (!target) return;
+
+		// The element that is actually visible as the row, which is not always the link the
+		// favourite points at: a class that expands into a spec menu shows a button, while
+		// the link lives inside the menu. The star goes in the visible one so it inherits
+		// that row's height and hover, rather than the wrapper's -- the wrapper also holds
+		// the 42px gap to the next row, so centring against it drops the star below the row.
+		const visibleRow =
+			row.querySelector<HTMLElement>(':scope > button.sim-link, :scope > .sim-links > a.sim-link') ?? (row.matches('.sim-link') ? row : null);
+		if (!visibleRow) return;
 		row.dataset.favoriteStar = '1';
 
 		const path = simPathOf(target.href);
@@ -122,6 +131,6 @@ export const installFavoriteStars = (root: ParentNode) => {
 		onFavoriteChange(render);
 
 		render();
-		row.appendChild(star);
+		visibleRow.appendChild(star);
 	});
 };
