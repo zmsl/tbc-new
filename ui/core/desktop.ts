@@ -1,3 +1,5 @@
+import { HOME_PARAM } from './favorite_sim';
+
 // Bridge exposed by the Electron desktop shell's preload script (desktop/preload.js).
 //
 // The same bundle ships to the website, where none of this exists, so every caller must
@@ -142,6 +144,24 @@ const TITLEBAR_CSS = `
 	height: 100%;
 	-webkit-app-region: drag;
 }
+.wowsims-titlebar__home {
+	/* Inside the drag strip, so it has to opt out or the click is swallowed by the window. */
+	-webkit-app-region: no-drag;
+	display: inline-flex;
+	align-items: center;
+	gap: 0.4rem;
+	flex: none;
+	height: 100%;
+	padding: 0 0.35rem;
+	border: none;
+	border-radius: 3px;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	cursor: pointer;
+	transition-duration: ${DESKTOP_MOTION_MS}ms;
+}
+.wowsims-titlebar__home:hover { background: rgba(255, 255, 255, 0.1); }
 .wowsims-titlebar__icon { width: 16px; height: 16px; flex: none; }
 .wowsims-titlebar__app { font-weight: 600; white-space: nowrap; flex: none; }
 .wowsims-titlebar__location,
@@ -218,6 +238,17 @@ const installTitleBar = () => {
 	const drag = document.createElement('div');
 	drag.className = 'wowsims-titlebar__drag';
 
+	// Icon and name together act as a home button. That matters more than it looks: once a
+	// favourite sim is set the landing page redirects away immediately, so this is the way
+	// back to sim selection. HOME_PARAM is what stops it bouncing straight back.
+	const home = document.createElement('button');
+	home.type = 'button';
+	home.className = 'wowsims-titlebar__home';
+	home.title = 'Back to sim selection';
+	home.addEventListener('click', () => {
+		window.location.href = `/tbc/?${HOME_PARAM}`;
+	});
+
 	const icon = document.createElement('img');
 	icon.className = 'wowsims-titlebar__icon';
 	icon.src = '/tbc/assets/favicon_io/favicon-32x32.png';
@@ -226,6 +257,7 @@ const installTitleBar = () => {
 	const appName = document.createElement('span');
 	appName.className = 'wowsims-titlebar__app';
 	appName.textContent = 'WoWSims TBC';
+	home.append(icon, appName);
 
 	const location = document.createElement('span');
 	location.className = 'wowsims-titlebar__location';
@@ -238,7 +270,7 @@ const installTitleBar = () => {
 		g.className = 'wowsims-titlebar__gap';
 		return g;
 	};
-	drag.append(icon, appName, gap(), location, gap(), dpsElem);
+	drag.append(home, gap(), location, gap(), dpsElem);
 
 	const share = document.createElement('button');
 	share.className = 'wowsims-titlebar__share';

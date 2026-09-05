@@ -5,6 +5,7 @@ import { ref } from 'tsx-vanilla';
 import i18n from '../../i18n/config';
 import { REPO_CHOOSE_NEW_ISSUE_URL, REPO_RELEASES_URL } from '../constants/other';
 import { DesktopBridge, DesktopUpdateInfo, getDesktop } from '../desktop';
+import { isFavoriteSim, setFavoriteSim, simPathOf } from '../favorite_sim';
 import { SimUI } from '../sim_ui';
 import { isLocal, noop } from '../utils';
 import { Component } from './component';
@@ -42,6 +43,7 @@ export class SimHeader extends Component {
 
 		this.knownIssuesContent = (<ul className="text-start ps-3 mb-0"></ul>) as HTMLUListElement;
 		this.knownIssuesLink = this.addKnownIssuesLink();
+		this.addFavoriteLink();
 		this.addBugReportLink();
 		this.addDownloadBinaryLink();
 		this.addSimOptionsLink();
@@ -154,6 +156,35 @@ export class SimHeader extends Component {
 
 		this.knownIssuesLink.classList.remove('hide');
 		this.knownIssuesLink._tippy?.setContent(this.knownIssuesContent);
+	}
+
+	// Also lives here, not only on the landing page: with a favourite set the landing page
+	// redirects away immediately, so a toggle that existed only there would be unreachable
+	// the moment it was used.
+	private addFavoriteLink() {
+		const href = window.location.href;
+		let link: TippyReferenceElement<HTMLElement>;
+
+		const render = () => {
+			const on = isFavoriteSim(href);
+			link.classList.toggle('favorite-on', on);
+			const icon = link.querySelector('i');
+			if (icon) icon.className = `${on ? 'fas' : 'far'} fa-star fa-lg`;
+			link._tippy?.setContent(on ? 'This sim opens on startup. Click to stop.' : 'Open this sim on startup');
+		};
+
+		link = this.addToolbarLink({
+			parent: this.simToolbar,
+			icon: 'far fa-star fa-lg',
+			tooltip: 'Open this sim on startup',
+			classes: 'favorite-sim',
+			onclick: () => {
+				setFavoriteSim(isFavoriteSim(href) ? null : simPathOf(href));
+				render();
+			},
+		}) as TippyReferenceElement<HTMLElement>;
+
+		render();
 	}
 
 	private addBugReportLink() {
