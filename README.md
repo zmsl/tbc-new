@@ -22,6 +22,21 @@ Then unzip the downloaded file, then open the unzipped file to open the sim in y
 
 Alternatively, you can choose from a specific relase on the [Releases](https://github.com/wowsims/tbc-new/releases) page and click the suitable link under "Assets"
 
+## Desktop App
+
+There is also an installable desktop version. It runs the sim in its own window instead of a
+browser tab, shuts the sim server down when you close the window, and prompts you when a new
+version is available. Grab the `.exe` (Windows) or `.dmg` (macOS) installer from the
+[Releases](https://github.com/wowsims/tbc-new/releases) page.
+
+Like the downloadable binary above, it sims on all your CPU cores rather than in WebAssembly
+in the browser, so it is considerably faster than the website.
+
+Note that the desktop app keeps its saved settings separately from your browser — to carry
+existing setups across, use the sim's JSON export in the browser and import it in the app.
+
+See [desktop/README.md](desktop/README.md) for how it is built.
+
 ## Documentation
 
 - [Installation Guide](docs/installation.md)

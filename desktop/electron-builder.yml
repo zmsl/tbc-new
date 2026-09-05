@@ -1,0 +1,63 @@
+appId: com.wowsims.tbc.desktop
+productName: WoWSims TBC
+copyright: MIT licensed. Built from wowsims/tbc-new.
+
+directories:
+  output: ../desktop-dist
+  buildResources: build
+
+# The shell is three files; everything the user actually looks at is embedded in the Go
+# binary below, so there is no renderer bundle to ship here.
+files:
+  - main.js
+  - preload.js
+  - package.json
+
+# Auto-update target. This MUST point at the fork that publishes the installers — pointing
+# it at wowsims/tbc-new would make the first update silently replace this build with an
+# upstream one.
+publish:
+  provider: github
+  owner: zmsl
+  repo: tbc-new
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: build/icon.png
+  artifactName: wowsimtbc-desktop-${version}-win-${arch}.${ext}
+  # The Go sim engine rides inside the bundle, so one update updates both it and the shell.
+  extraResources:
+    - from: build/sidecar/wowsimtbc-${arch}.exe
+      to: wowsimtbc.exe
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: WoWSims TBC
+  uninstallDisplayName: WoWSims TBC
+
+mac:
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+    # The zip is not optional: Squirrel.Mac updates from it, not from the dmg. Dropping it
+    # silently breaks auto-update even once the app is signed.
+    - target: zip
+      arch: [x64, arm64]
+  icon: build/icon.png
+  category: public.app-category.games
+  artifactName: wowsimtbc-desktop-${version}-mac-${arch}.${ext}
+  extraResources:
+    - from: build/sidecar/wowsimtbc-${arch}
+      to: wowsimtbc
+  # Unsigned builds are shippable but cannot self-update (see MAC_AUTO_UPDATE_SUPPORTED in
+  # main.js) and users must right-click -> Open past Gatekeeper on first launch. Add
+  # hardenedRuntime, entitlements and notarize here once a Developer ID cert is available.
+
+dmg:
+  artifactName: wowsimtbc-desktop-${version}-mac-${arch}.${ext}

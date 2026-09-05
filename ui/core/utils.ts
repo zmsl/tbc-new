@@ -366,8 +366,13 @@ export const formatToNumber = (number: number, options?: Intl.NumberFormatOption
 type Environments = 'local' | 'external';
 
 const hostname = window.location.hostname;
+// The desktop shell serves the UI over its own scheme so localStorage keeps a stable origin
+// across launches -- the sim server binds a different port every time, and an origin that
+// includes the port would hand the user an empty settings store on each start. It is a local
+// sim by every meaning the UI cares about, but its hostname is "app", not "localhost".
+const isDesktopScheme = window.location.protocol === 'wowsims:';
 export const getEnvironment = (): Environments => {
-	if (hostname.includes('localhost')) return 'local';
+	if (isDesktopScheme || hostname.includes('localhost')) return 'local';
 	return 'external';
 };
 

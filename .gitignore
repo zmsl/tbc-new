@@ -52,3 +52,8 @@ tools/db2tool/listfile.csv
 tools/db2tool/DBDCache/
 tools/db2tool/dbfilesclient/
 tools/db2tool/caches/
+
+# electron desktop shell
+desktop/node_modules
+desktop/build/
+desktop-dist/

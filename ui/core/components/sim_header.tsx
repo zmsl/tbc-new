@@ -4,6 +4,7 @@ import { ref } from 'tsx-vanilla';
 
 import i18n from '../../i18n/config';
 import { REPO_CHOOSE_NEW_ISSUE_URL, REPO_RELEASES_URL } from '../constants/other';
+import { DesktopBridge, DesktopUpdateInfo, getDesktop } from '../desktop';
 import { SimUI } from '../sim_ui';
 import { isLocal, noop } from '../utils';
 import { Component } from './component';
@@ -169,6 +170,14 @@ export class SimHeader extends Component {
 		const icon = 'fas fa-gauge-high fa-lg';
 		const parent = this.simToolbar;
 
+		const desktop = getDesktop();
+		if (desktop) {
+			// Already running the desktop app, so "download the sim for faster simulating"
+			// is meaningless here. The shell owns update checking instead.
+			this.addDesktopUpdateLink(desktop);
+			return;
+		}
+
 		if (isLocal()) {
 			fetch('/version')
 				.then(resp => {
@@ -198,6 +207,65 @@ export class SimHeader extends Component {
 				classes: 'downbin',
 			});
 		}
+	}
+
+	// Update control for the desktop shell. Hidden until the shell reports that a newer
+	// release exists, then walks available -> downloading -> ready, installing on the final
+	// click. Nothing here runs on the website; addDownloadBinaryLink gates on the bridge.
+	private addDesktopUpdateLink(desktop: DesktopBridge) {
+		let state: 'available' | 'downloading' | 'ready' = 'available';
+		let info: DesktopUpdateInfo | null = null;
+
+		const link = this.addToolbarLink({
+			parent: this.simToolbar,
+			icon: 'fas fa-circle-arrow-down fa-lg',
+			tooltip: 'Checking for updates...',
+			classes: 'downbin link-danger hide',
+			onclick: () => {
+				if (!info || state === 'downloading') return;
+				if (state === 'ready') {
+					desktop.installUpdate();
+					return;
+				}
+				state = 'downloading';
+				setTooltip('Downloading update...');
+				desktop
+					.startUpdate()
+					.then(result => {
+						// A build that cannot replace itself opens the release page instead,
+						// so there is nothing further for this button to do.
+						if (result?.openedExternally) {
+							state = 'available';
+							setTooltip(`Version ${info!.version} is available - download it from the releases page`);
+						}
+					})
+					.catch(err => {
+						state = 'available';
+						setTooltip(`Update failed: ${String(err)}`);
+					});
+			},
+		}) as TippyReferenceElement<HTMLElement>;
+
+		const setTooltip = (content: string) => link._tippy?.setContent(content);
+
+		desktop.onUpdateAvailable(update => {
+			info = update;
+			link.classList.remove('hide');
+			setTooltip(
+				update.canSelfUpdate
+					? `Version ${update.version} is available - click to update and restart`
+					: `Version ${update.version} is available - click to open the download page`,
+			);
+		});
+		desktop.onUpdateProgress(percent => setTooltip(`Downloading update... ${percent}%`));
+		desktop.onUpdateReady(() => {
+			state = 'ready';
+			setTooltip('Update ready - click to restart and install');
+		});
+		desktop.onUpdateError(message => {
+			state = 'available';
+			setTooltip(`Update failed: ${message}`);
+		});
 	}
 
 	private addSimOptionsLink() {
