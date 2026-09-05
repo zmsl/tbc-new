@@ -38,6 +38,8 @@ let simProcess = null;
 let simPort = 0;
 let mainWindow = null;
 let powerBlockerId = null;
+// A link that launched the app arrives before there is a window to show it in.
+let pendingDeepLink = null;
 
 protocol.registerSchemesAsPrivileged([
 	{
@@ -139,6 +141,38 @@ function installProtocolHandler() {
 		}
 		return net.fetch(`http://127.0.0.1:${simPort}${url.pathname}${url.search}`, init);
 	});
+}
+
+// Share links exported as "Desktop app" carry the wowsims:// scheme. Registering as the OS
+// handler is what makes clicking one anywhere -- Discord, a browser, a file -- open it here
+// instead of doing nothing. The scheme is the same one the UI is served over, so a deep link
+// is literally the in-app URL and needs no translation.
+function registerProtocolHandler() {
+	if (process.defaultApp) {
+		// Unpackaged: the executable is Electron itself, so the registration has to name the
+		// script too or the OS would relaunch a bare Electron.
+		if (process.argv.length >= 2) {
+			app.setAsDefaultProtocolClient(SCHEME, process.execPath, [path.resolve(process.argv[1])]);
+		}
+	} else {
+		app.setAsDefaultProtocolClient(SCHEME);
+	}
+}
+
+// Pulls a wowsims:// URL out of a command line. Windows and Linux deliver deep links as an
+// argv entry rather than an event.
+function deepLinkFromArgv(argv) {
+	return (argv || []).find(arg => typeof arg === 'string' && arg.startsWith(`${SCHEME}://`)) || null;
+}
+
+function openDeepLink(url) {
+	if (!url || !mainWindow || mainWindow.isDestroyed()) return;
+	// Only our own origin: a crafted wowsims://somewhere-else link must not be able to point
+	// the window at arbitrary content.
+	if (!url.startsWith(`${ORIGIN}/`)) return;
+	mainWindow.loadURL(url);
+	if (mainWindow.isMinimized()) mainWindow.restore();
+	mainWindow.focus();
 }
 
 const windowStateFile = () => path.join(app.getPath('userData'), 'window-state.json');
@@ -447,11 +481,21 @@ ipcMain.handle('wowsims:install-update', () => {
 if (!app.requestSingleInstanceLock()) {
 	app.quit();
 } else {
-	app.on('second-instance', () => {
+	app.on('second-instance', (_event, argv) => {
 		if (mainWindow) {
 			if (mainWindow.isMinimized()) mainWindow.restore();
 			mainWindow.focus();
 		}
+		// A deep link clicked while the app is already running arrives as the second
+		// instance's argv rather than as an event.
+		openDeepLink(deepLinkFromArgv(argv));
+	});
+
+	// macOS delivers deep links as an event instead, both cold and warm.
+	app.on('open-url', (event, url) => {
+		event.preventDefault();
+		if (mainWindow) openDeepLink(url);
+		else pendingDeepLink = url;
 	});
 
 	app.whenReady().then(async () => {
@@ -465,7 +509,14 @@ if (!app.requestSingleInstanceLock()) {
 			return;
 		}
 		installProtocolHandler();
+		registerProtocolHandler();
 		setupAutoUpdate(createWindow());
+
+		// Launched by clicking a link: load it instead of the default page, once the window
+		// exists to load it into.
+		const coldStartLink = pendingDeepLink || deepLinkFromArgv(process.argv);
+		pendingDeepLink = null;
+		if (coldStartLink) mainWindow.once('ready-to-show', () => openDeepLink(coldStartLink));
 	});
 }
 

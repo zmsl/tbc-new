@@ -129,11 +129,20 @@ const installFileDrop = () => {
 // machine -- in-app navigation between specs keeps using the real origin.
 export const PUBLIC_SITE_ORIGIN = 'https://wowsims.com';
 
-// Base URL for a shareable link to the current page. On the website this is just where you
-// already are; in the desktop app the origin is swapped for the public site, because
-// wowsims://app/... would only ever open on the machine that produced it.
-export const getShareableUrl = (): URL =>
-	isDesktop() ? new URL(window.location.pathname + window.location.search, PUBLIC_SITE_ORIGIN) : new URL(window.location.href);
+// The installed app's own origin. A link with this origin is routed to the app by the OS,
+// because the shell registers itself as the handler for the scheme. It means nothing to a
+// browser, and nothing at all on a machine without the app installed.
+export const DESKTOP_ORIGIN = 'wowsims://app';
+
+export type ShareLinkKind = 'web' | 'desktop';
+
+// Which origin a share link carries. Web links open for anyone; desktop links open straight
+// into the installed app, skipping the browser.
+export const buildShareUrl = (kind: ShareLinkKind): URL =>
+	new URL(window.location.pathname + window.location.search, kind === 'desktop' ? DESKTOP_ORIGIN : PUBLIC_SITE_ORIGIN);
+
+// In the app, a link you make is most likely for someone else who also runs the app.
+export const defaultShareLinkKind = (): ShareLinkKind => (isDesktop() ? 'desktop' : 'web');
 
 // Sim lifecycle, forwarded to the OS: taskbar progress, keeping the machine awake, and a
 // notification when a backgrounded run finishes. No-ops on the website.

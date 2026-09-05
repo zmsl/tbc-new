@@ -689,7 +689,10 @@ export abstract class IndividualSimUI<SpecType extends Spec> extends SimUI {
 	}
 
 	toLink(): string {
-		return IndividualLinkExporter.createLink(this);
+		// Always a web link: this feeds the crash-report issue body, and whoever reads that
+		// issue needs a URL they can open in a browser, not one that only works on the
+		// reporter's machine.
+		return IndividualLinkExporter.createLink(this, undefined, 'web');
 	}
 
 	fromProto(eventID: EventID, settings: IndividualSimSettings, includeCategories?: Array<SimSettingCategories>) {

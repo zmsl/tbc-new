@@ -21,6 +21,13 @@ publish:
   owner: zmsl
   repo: tbc-new
 
+# Makes "Desktop app" share links clickable from outside the app. Windows registers this at
+# runtime via setAsDefaultProtocolClient; macOS requires it declared in the bundle's
+# Info.plist, which is what this produces.
+protocols:
+  - name: WoWSims TBC
+    schemes: [wowsims]
+
 win:
   target:
     - target: nsis
