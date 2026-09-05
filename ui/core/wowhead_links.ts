@@ -40,9 +40,20 @@ const wowheadUrlFor = (start: HTMLElement): string | null => {
 
 let installed = false;
 
+// The tab rendered under every tooltip by scss/shared/_wowhead_tooltip.scss reads its text
+// from here, because the modifier differs by platform: ctrl+click is a right-click on macOS,
+// so Cmd is the equivalent there.
+const setHintLabel = () => {
+	const isMac = /mac/i.test(navigator.platform) || /Mac OS X/.test(navigator.userAgent);
+	const label = isMac ? '\u2318+Click to open in Wowhead' : 'Ctrl+Click to open in Wowhead';
+	// JSON.stringify supplies the quotes that a CSS content value needs.
+	document.documentElement.style.setProperty('--wowhead-hint-label', JSON.stringify(label));
+};
+
 export const installWowheadCtrlClick = () => {
 	if (installed) return;
 	installed = true;
+	setHintLabel();
 
 	document.addEventListener(
 		'click',
