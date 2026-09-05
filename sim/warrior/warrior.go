@@ -28,17 +28,10 @@ const (
 	CleaveRageCost       = 20.0
 )
 
-// Applied when the options are unset, so settings saved before they existed, and
-// callers that don't set them, get sane values instead of a 0 threshold.
-//
-// Cleave's default is derived rather than picked: a threshold is really "how much rage
-// to keep back for Bloodthirst and Whirlwind", so the two abilities should leave the
-// same headroom after casting. Cleave costs more, so its threshold is higher by exactly
-// that difference.
-const (
-	DefaultHSRageThreshold     = 40.0
-	DefaultCleaveRageThreshold = DefaultHSRageThreshold + (CleaveRageCost - HeroicStrikeRageCost)
-)
+// Applied when the Heroic Strike threshold is unset, so settings saved before the option
+// existed keep the previous behaviour. Cleave has no constant of its own: it is derived
+// from Cleave's live rage cost in cleaveRageThreshold().
+const DefaultHSRageThreshold = 40.0
 
 const (
 	SpellFlagBleed = core.SpellFlagAgentReserved1
@@ -247,9 +240,6 @@ func NewWarrior(character *core.Character, options *proto.WarriorOptions, talent
 	}
 	if warrior.WarriorInputs.HsRageThreshold <= 0 {
 		warrior.WarriorInputs.HsRageThreshold = DefaultHSRageThreshold
-	}
-	if warrior.WarriorInputs.CleaveRageThreshold <= 0 {
-		warrior.WarriorInputs.CleaveRageThreshold = DefaultCleaveRageThreshold
 	}
 	core.FillTalentsProto(warrior.Talents.ProtoReflect(), talents, TalentTreeSizes)
 

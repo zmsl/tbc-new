@@ -223,7 +223,6 @@ export const DefaultOptions = WarriorOptions.create({
 	classOptions: {
 		queueDelay: 250,
 		hsRageThreshold: 40,
-		cleaveRageThreshold: 45,
 		startingRage: 50,
 		defaultShout: WarriorShout.WarriorShoutBattle,
 		defaultStance: WarriorStance.WarriorStanceBerserker,

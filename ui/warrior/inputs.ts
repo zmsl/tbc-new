@@ -1,4 +1,7 @@
 import * as InputHelpers from '../core/components/input_helpers';
+import { Player } from '../core/player';
+import { WarriorTalents } from '../core/proto/warrior';
+import { TypedEvent } from '../core/typed_event';
 import { WarriorShout, WarriorStance } from '../core/proto/warrior';
 import { ActionId } from '../core/proto_utils/action_id';
 import { WarriorSpecs } from '../core/proto_utils/utils';
@@ -52,12 +55,30 @@ export const QueueDelay = <SpecType extends WarriorSpecs>() =>
 // Mirrors warrior.DefaultHSRageThreshold in the sim. Both the sim and the rotation
 // substitute this when the option is unset, so settings saved before the option existed
 // keep behaving as they did. Shown in the picker so the number matches what is used.
-// Mirrors the constants of the same name in sim/warrior/warrior.go. Cleave's default is
-// derived so the two abilities leave the same rage headroom after casting.
+// Mirrors sim/warrior: base rage costs, and the talents that discount them. Improved
+// Heroic Strike only affects Heroic Strike; Focused Rage affects both.
 const HEROIC_STRIKE_RAGE_COST = 15;
 const CLEAVE_RAGE_COST = 20;
 export const DEFAULT_HS_RAGE_THRESHOLD = 40;
-export const DEFAULT_CLEAVE_RAGE_THRESHOLD = DEFAULT_HS_RAGE_THRESHOLD + (CLEAVE_RAGE_COST - HEROIC_STRIKE_RAGE_COST);
+
+const heroicStrikeRageCost = <SpecType extends WarriorSpecs>(player: Player<SpecType>) => {
+	const talents = player.getTalents() as WarriorTalents;
+	return Math.max(0, HEROIC_STRIKE_RAGE_COST - (talents.improvedHeroicStrike || 0) - (talents.focusedRage || 0));
+};
+
+export const cleaveRageCost = <SpecType extends WarriorSpecs>(player: Player<SpecType>) => {
+	const talents = player.getTalents() as WarriorTalents;
+	return Math.max(0, CLEAVE_RAGE_COST - (talents.focusedRage || 0));
+};
+
+export const hsRageThreshold = <SpecType extends WarriorSpecs>(player: Player<SpecType>) =>
+	player.getClassOptions().hsRageThreshold || DEFAULT_HS_RAGE_THRESHOLD;
+
+// A threshold is the ability's own cost plus the rage kept back for Bloodthirst and
+// Whirlwind. Cleave's default is derived from Cleave's cost, not from the Heroic Strike
+// threshold, so both keep the same reserve whatever the talents discount.
+export const cleaveRageThreshold = <SpecType extends WarriorSpecs>(player: Player<SpecType>) =>
+	player.getClassOptions().cleaveRageThreshold || cleaveRageCost(player) + (hsRageThreshold(player) - heroicStrikeRageCost(player));
 
 export const HsRageThreshold = <SpecType extends WarriorSpecs>() =>
 	InputHelpers.makeClassOptionsNumberInput<SpecType>({
@@ -65,7 +86,8 @@ export const HsRageThreshold = <SpecType extends WarriorSpecs>() =>
 		label: i18n.t('settings_tab.other.hs_rage_threshold.label'),
 		labelTooltip: i18n.t('settings_tab.other.hs_rage_threshold.tooltip'),
 		positive: true,
-		getValue: player => player.getClassOptions().hsRageThreshold || DEFAULT_HS_RAGE_THRESHOLD,
+		getValue: player => hsRageThreshold(player),
+		changeEmitter: player => TypedEvent.onAny([player.specOptionsChangeEmitter, player.talentsChangeEmitter]),
 	});
 
 export const CleaveRageThreshold = <SpecType extends WarriorSpecs>() =>
@@ -74,7 +96,8 @@ export const CleaveRageThreshold = <SpecType extends WarriorSpecs>() =>
 		label: i18n.t('settings_tab.other.cleave_rage_threshold.label'),
 		labelTooltip: i18n.t('settings_tab.other.cleave_rage_threshold.tooltip'),
 		positive: true,
-		getValue: player => player.getClassOptions().cleaveRageThreshold || DEFAULT_CLEAVE_RAGE_THRESHOLD,
+		getValue: player => cleaveRageThreshold(player),
+		changeEmitter: player => TypedEvent.onAny([player.specOptionsChangeEmitter, player.talentsChangeEmitter]),
 	});
 
 export const BattleShoutSolarianSapphire = <SpecType extends WarriorSpecs>() =>

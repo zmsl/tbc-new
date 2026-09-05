@@ -52,7 +52,7 @@
 	],
 	"valueVariables": [
 	{"name":"Cleave Rage Cost","value":{"const":{"val":"20"}}},
-	{"name":"Cleave Rage Threshold","value":{"const":{"val":"45"}}},
+	{"name":"Cleave Rage Threshold","value":{"const":{"val":"48"}}},
 	{"name":"HS Rage Threshold","value":{"const":{"val":"40"}}},
 	{"name":"Bloodlust time","value":{"const":{"val":"5s"}}},
 	{"name":"Delay Check","value":{"and":{"vals":[{"cmp":{"op":"OpGe","lhs":{"spellTimeToReady":{"spellId":{"spellId":30330}}},"rhs":{"const":{"val":"1.5s"}}}},{"cmp":{"op":"OpGe","lhs":{"spellTimeToReady":{"spellId":{"spellId":1680,"tag":1}}},"rhs":{"const":{"val":"1.5s"}}}}]}}},

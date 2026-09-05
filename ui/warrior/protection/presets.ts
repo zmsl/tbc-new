@@ -76,7 +76,6 @@ export const DefaultOptions = ProtectionWarriorOptions.create({
 	classOptions: {
 		queueDelay: 250,
 		hsRageThreshold: 40,
-		cleaveRageThreshold: 45,
 		startingRage: 100,
 		defaultShout: WarriorShout.WarriorShoutCommanding,
 		defaultStance: WarriorStance.WarriorStanceDefensive,

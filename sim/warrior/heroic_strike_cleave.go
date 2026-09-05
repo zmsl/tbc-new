@@ -42,7 +42,8 @@ func (war *Warrior) registerHeroicStrike() {
 			}
 		},
 	})
-	war.makeQueueSpellsAndAura(spell, war.HsRageThreshold)
+	war.HeroicStrike = spell
+	war.makeQueueSpellsAndAura(spell, war.heroicStrikeRageThreshold)
 }
 
 func (war *Warrior) registerCleave() {
@@ -82,10 +83,32 @@ func (war *Warrior) registerCleave() {
 			}
 		},
 	})
-	war.makeQueueSpellsAndAura(spell, war.CleaveRageThreshold)
+	war.Cleave = spell
+	war.makeQueueSpellsAndAura(spell, war.cleaveRageThreshold)
 }
 
-func (war *Warrior) makeQueueSpellsAndAura(srcSpell *core.Spell, rageThreshold float64) {
+// A rage threshold is really "this ability's own cost, plus the rage to keep back for
+// Bloodthirst and Whirlwind". Costs are read live rather than captured, so the talents
+// that discount them -- Improved Heroic Strike on Heroic Strike, Focused Rage on both --
+// are accounted for.
+func (war *Warrior) rageReserve() float64 {
+	return war.HsRageThreshold - war.HeroicStrike.Cost.GetCurrentCost()
+}
+
+func (war *Warrior) heroicStrikeRageThreshold() float64 {
+	return war.HsRageThreshold
+}
+
+// Derived from Cleave's own cost rather than from the Heroic Strike threshold, so both
+// abilities keep the same rage in reserve. An explicit setting overrides it.
+func (war *Warrior) cleaveRageThreshold() float64 {
+	if war.CleaveRageThreshold > 0 {
+		return war.CleaveRageThreshold
+	}
+	return war.Cleave.Cost.GetCurrentCost() + war.rageReserve()
+}
+
+func (war *Warrior) makeQueueSpellsAndAura(srcSpell *core.Spell, rageThreshold func() float64) {
 	queueAura := war.RegisterAura(core.Aura{
 		Label:    "HS/Cleave Queue Aura-" + srcSpell.ActionID.String(),
 		ActionID: srcSpell.ActionID.WithTag(1),
@@ -144,7 +167,7 @@ func (war *Warrior) makeQueueSpellsAndAura(srcSpell *core.Spell, rageThreshold f
 							// Must come after Activate: OnGain drops any previous queue
 							// aura, and that OnExpire clears this flag.
 							war.curQueueWillCancel = willCancel
-							war.curQueueThreshold = rageThreshold
+							war.curQueueThreshold = rageThreshold()
 							war.queueIsPending = false
 						},
 					})

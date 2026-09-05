@@ -572,11 +572,11 @@
 			},
 			"hs_rage_threshold": {
 				"label": "Heroic Strike Rage Threshold",
-				"tooltip": "Rage at or above which a queued Heroic Strike is worth spending. Drives both the rotation's cast condition and, when queue canceling is enabled, the decision made as the main-hand swing lands. Heroic Strike competes with Bloodthirst and Whirlwind for rage and loses, so it wants headroom above its cost."
+				"tooltip": "Rage at or above which a queued Heroic Strike is worth spending. Drives both the rotation's cast condition and, when queue canceling is enabled, the decision made as the main-hand swing lands. The amount above the ability's own rage cost is what is kept back for Bloodthirst and Whirlwind."
 			},
 			"cleave_rage_threshold": {
 				"label": "Cleave Rage Threshold",
-				"tooltip": "Same as the Heroic Strike threshold, but for Cleave. Kept separate because Cleave costs more. Note that measured multi-target DPS actually favours a much lower value, closer to Cleave's 20 rage cost, since its damage per rage on two or more targets beats Bloodthirst and Whirlwind. Defaults to the Heroic Strike threshold plus the 5 rage cost difference, so both leave the same rage headroom for Bloodthirst and Whirlwind."
+				"tooltip": "Same as the Heroic Strike threshold, but for Cleave. Leave blank to derive it from Cleave's own rage cost plus the same reserve the Heroic Strike threshold keeps back, so both abilities hold equal rage in hand. Both costs account for Improved Heroic Strike and Focused Rage."
 			},
 			"assume_bleed_active": {
 				"label": "Assume Bleed Always Active",

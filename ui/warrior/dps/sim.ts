@@ -193,13 +193,14 @@ const SPEC_CONFIG = registerSpecConfig(Spec.SpecDpsWarrior, {
 		// spending": the same settings drive these rotation conditions and the swing-time
 		// cancel check in the sim, so the two can't drift apart. Heroic Strike and Cleave
 		// are tracked separately because their damage per rage differs sharply.
-		const classOptions = player.getClassOptions();
 		const setThreshold = (name: string, value: number) => {
 			const variable = rotation.valueVariables.find(v => v.name === name);
 			if (variable && variable.value?.value.oneofKind === 'const') variable.value.value.const.val = String(value);
 		};
-		setThreshold('HS Rage Threshold', classOptions.hsRageThreshold || WarriorInputs.DEFAULT_HS_RAGE_THRESHOLD);
-		setThreshold('Cleave Rage Threshold', classOptions.cleaveRageThreshold || WarriorInputs.DEFAULT_CLEAVE_RAGE_THRESHOLD);
+		setThreshold('HS Rage Threshold', WarriorInputs.hsRageThreshold(player));
+		setThreshold('Cleave Rage Threshold', WarriorInputs.cleaveRageThreshold(player));
+		// Gates the Heroic Strike fallback to the band where Cleave cannot be queued.
+		setThreshold('Cleave Rage Cost', WarriorInputs.cleaveRageCost(player));
 
 		const bloodlustTimingVariable = rotation.valueVariables.find(variable => variable.name === 'Bloodlust time');
 		if (bloodlustTimingVariable && bloodlustTimingVariable.value?.value.oneofKind === 'const')
