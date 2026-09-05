@@ -235,6 +235,13 @@ desktop-win: $(DESKTOP_DIR)/node_modules $(DESKTOP_ICON) desktop-version desktop
 desktop-mac: $(DESKTOP_DIR)/node_modules $(DESKTOP_ICON) desktop-version desktop-sidecar-mac
 	cd $(DESKTOP_DIR) && npx electron-builder --mac dmg zip --publish never
 
+# Unpacked Windows app, for eyeballing the real window without building an installer.
+# Unlike desktop-win this needs no wine, because it stops before NSIS assembly. Copy
+# desktop-dist/win-unpacked somewhere under /mnt/c and run "WoWSims TBC.exe" from Windows.
+.PHONY: desktop-preview-win
+desktop-preview-win: $(DESKTOP_DIR)/node_modules $(DESKTOP_ICON) desktop-sidecar-win
+	cd $(DESKTOP_DIR) && npx electron-builder --win --dir --publish never
+
 # Runs the shell against the repo-root wowsimtbc build, for iterating on the shell itself.
 .PHONY: desktop-dev
 desktop-dev: $(DESKTOP_DIR)/node_modules wowsimtbc

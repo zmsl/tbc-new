@@ -65,6 +65,15 @@ VERSION=v1.2.3 make desktop-mac     # dmg + zip        -> desktop-dist/
 either offers an update it already has or never notices one. The make targets keep them in
 sync; CI does the same via `npm version`.
 
+To look at the real window without building an installer (no wine needed -- this stops
+before NSIS assembly):
+
+```sh
+make desktop-preview-win        # -> desktop-dist/win-unpacked/
+```
+
+Copy that directory somewhere under `/mnt/c` and run `WoWSims TBC.exe` from Windows.
+
 Installers are built on their own platform in CI (`.github/workflows/release.yml`) — dmg
 creation requires macOS, and building NSIS on Windows leaves room for code signing later.
 
