@@ -47,7 +47,10 @@ clean:
 	  binary_dist \
 	  ui/core/index.ts \
 	  ui/core/proto/*.ts \
-	  node_modules
+	  node_modules \
+	  desktop-dist \
+	  desktop/build \
+	  desktop/node_modules
 	find . -name "*.results.tmp" -type f -delete
 
 ui/core/proto/api.ts: proto/*.proto node_modules
@@ -183,6 +186,72 @@ release: wowsimtbc wowsimtbc-windows.exe
 	zip wowsimcli-amd64-linux.zip wowsimcli-amd64-linux
 	zip wowsimcli-arm64-darwin.zip wowsimcli-arm64-darwin
 	zip wowsimcli-windows.exe.zip wowsimcli-windows.exe
+
+
+# ---- Desktop app (Electron shell) -------------------------------------------------------
+# Deliberately off the default build path: `make`, `make test` and `make host` never touch
+# any of this, and Electron stays out of the root package.json so `npm ci` -- and the four
+# CI test shards that run it -- are unaffected.
+
+DESKTOP_DIR     := desktop
+DESKTOP_SIDECAR := $(DESKTOP_DIR)/build/sidecar
+DESKTOP_ICON    := $(DESKTOP_DIR)/build/icon.png
+DESKTOP_LDFLAGS := -X 'main.Version=$(VERSION)' -s -w
+
+# Single source of truth for the app icon; electron-builder derives .ico and .icns from it.
+$(DESKTOP_ICON): assets/favicon_io/android-chrome-512x512.png
+	mkdir -p $(@D)
+	cp $< $@
+
+$(DESKTOP_DIR)/node_modules: $(DESKTOP_DIR)/package.json
+	cd $(DESKTOP_DIR) && npm install
+	touch $@
+
+# electron-updater compares releases against the version in desktop/package.json while the
+# sim server reports its -ldflags value. If the two drift, the app either offers an update
+# it already has or never notices one.
+.PHONY: desktop-version
+desktop-version:
+ifneq ($(VERSION),)
+	cd $(DESKTOP_DIR) && npm version --no-git-tag-version --allow-same-version $(patsubst v%,%,$(VERSION))
+endif
+
+# Desktop-only: swap the cdnjs Font Awesome link for a bundled copy, in the embedded client
+# tree. The web sources keep the CDN link untouched, so the site is unaffected.
+.PHONY: desktop-bundle-fonts
+desktop-bundle-fonts: $(DESKTOP_DIR)/node_modules
+	node tools/desktop/bundle_fonts.mjs binary_dist/tbc
+
+.PHONY: desktop-sidecar-win
+desktop-sidecar-win: binary_dist binary_dist/dist.go desktop-bundle-fonts
+	mkdir -p $(DESKTOP_SIDECAR)
+	GOOS=windows GOARCH=amd64 GOAMD64=v2 go build -o $(DESKTOP_SIDECAR)/wowsimtbc-x64.exe -ldflags="$(DESKTOP_LDFLAGS)" ./sim/web/main.go
+
+.PHONY: desktop-sidecar-mac
+desktop-sidecar-mac: binary_dist binary_dist/dist.go desktop-bundle-fonts
+	mkdir -p $(DESKTOP_SIDECAR)
+	GOOS=darwin GOARCH=amd64 GOAMD64=v2 go build -o $(DESKTOP_SIDECAR)/wowsimtbc-x64   -ldflags="$(DESKTOP_LDFLAGS)" ./sim/web/main.go
+	GOOS=darwin GOARCH=arm64                go build -o $(DESKTOP_SIDECAR)/wowsimtbc-arm64 -ldflags="$(DESKTOP_LDFLAGS)" ./sim/web/main.go
+
+.PHONY: desktop-win
+desktop-win: $(DESKTOP_DIR)/node_modules $(DESKTOP_ICON) desktop-version desktop-sidecar-win
+	cd $(DESKTOP_DIR) && npx electron-builder --win nsis --publish never
+
+.PHONY: desktop-mac
+desktop-mac: $(DESKTOP_DIR)/node_modules $(DESKTOP_ICON) desktop-version desktop-sidecar-mac
+	cd $(DESKTOP_DIR) && npx electron-builder --mac dmg zip --publish never
+
+# Unpacked Windows app, for eyeballing the real window without building an installer.
+# Unlike desktop-win this needs no wine, because it stops before NSIS assembly. Copy
+# desktop-dist/win-unpacked somewhere under /mnt/c and run "WoWSims TBC.exe" from Windows.
+.PHONY: desktop-preview-win
+desktop-preview-win: $(DESKTOP_DIR)/node_modules $(DESKTOP_ICON) desktop-sidecar-win
+	cd $(DESKTOP_DIR) && npx electron-builder --win --dir --publish never
+
+# Runs the shell against the repo-root wowsimtbc build, for iterating on the shell itself.
+.PHONY: desktop-dev
+desktop-dev: $(DESKTOP_DIR)/node_modules wowsimtbc
+	cd $(DESKTOP_DIR) && npm start
 
 sim/core/proto/api.pb.go: proto/*.proto
 	@if go version -m "$$(command -v protoc-gen-go)" 2>/dev/null | grep -qE '^[[:space:]]+mod[[:space:]]+github\.com/golang/protobuf[[:space:]]'; then \

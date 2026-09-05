@@ -1,4 +1,5 @@
 import clsx from 'clsx';
+import tippy from 'tippy.js';
 import { ref } from 'tsx-vanilla';
 
 import i18n from '../i18n/config.js';
@@ -13,6 +14,8 @@ import { SimTitleDropdown } from './components/sim_title_dropdown.js';
 import { SocialLinks } from './components/social_links.jsx';
 import Toast from './components/toast';
 import { REPO_NEW_ISSUE_URL } from './constants/other';
+import { applyDesktopTweaks } from './desktop';
+import { installWowheadCtrlClick } from './wowhead_links';
 import { LaunchStatus, SimStatus } from './launched_sims.js';
 import { PlayerSpec } from './player_spec.js';
 import { ErrorOutcomeType } from './proto/api';
@@ -67,6 +70,10 @@ export abstract class SimUI extends Component {
 
 	constructor(parentElem: HTMLElement, sim: Sim, config: SimUIConfig) {
 		super(parentElem, 'sim-ui');
+		// Before anything below builds a tooltip: tippy's defaults only apply to instances
+		// created after they are set. No-op outside the desktop app.
+		applyDesktopTweaks(tippy.setDefaultProps);
+		installWowheadCtrlClick();
 		this.sim = sim;
 		this.config = config;
 		this.disabled = !isDevMode() && config.simStatus.status === LaunchStatus.Unlaunched;
@@ -75,9 +82,7 @@ export abstract class SimUI extends Component {
 			<>
 				<div className="sim-root">
 					<div className="sim-bg" />
-					{config.noticeText ? (
-						<div className="notices-banner alert border-bottom mb-0 text-center">{config.noticeText}</div>
-					) : null}
+					{config.noticeText ? <div className="notices-banner alert border-bottom mb-0 text-center">{config.noticeText}</div> : null}
 					<div className="sim-container">
 						<aside className="sim-sidebar">
 							<div className="sim-title" />

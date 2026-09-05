@@ -46,3 +46,30 @@
 		}
 	}
 }
+
+// Star that pins a sim as the one to open on startup. It sits on the class row, in both the
+// landing page list and the sim's spec switcher, which share this markup. Not on the spec
+// entries inside a menu: the row is what is visible without opening anything.
+//
+// Laid out as a flex item inside the row rather than absolutely against the wrapper. The
+// wrapper also contains the gap to the next row, so it is taller than the row itself and
+// centring against it drops the star low. Being inside the row also means the row's hover
+// background covers the star.
+.sim-link > .sim-link-favorite {
+	margin-left: auto;
+	align-self: center;
+	padding: 0.2rem 0.55rem;
+	color: rgb(255 255 255 / 25%);
+	font-size: 0.875rem;
+	line-height: 1;
+	cursor: pointer;
+	transition: color 0.15s ease-in-out;
+
+	&:hover {
+		color: rgb(255 255 255 / 70%);
+	}
+
+	&--on {
+		color: var(--bs-warning);
+	}
+}

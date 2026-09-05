@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"maps"
 	"slices"
 	"sync"
 	"time"
@@ -21,52 +22,68 @@ var ItemEffectRandPropPointsByIlvl = map[int32]ItemEffectRandPropPoints{}
 var ConsumablesByID = map[int32]Consumable{}
 var SpellEffectsById = map[int32]*proto.SpellEffect{}
 
+// The item database is published copy-on-write.
+//
+// Every sim request carries the slice of the database it needs, so entries get added while
+// other requests are already reading. In Go a map that is being written to cannot also be
+// read: it is a fatal error rather than a recoverable one, and it takes the whole server
+// down. Locking only the writers, as this did previously, leaves reader-versus-writer
+// completely unguarded -- and the readers are spread across the engine, indexing these maps
+// directly.
+//
+// So a published map is never mutated again. addToDatabase copies, adds to the copy, and
+// replaces the variable, meaning a reader sees either the old map or the new one and neither
+// is ever written to. The lock serialises writers, so two of them cannot copy the same base
+// map and each drop the other's additions.
+//
+// Entries are only ever added, never changed or removed, and a request adds what it needs
+// before reading it, so holding a slightly older map can only ever mean lacking entries that
+// request never asked for.
 var mutex = &sync.Mutex{}
 
+// Returns the map unchanged when every incoming entry is already known, which is the common
+// case once the server has warmed up: no copy and no publish.
+func withAdditions[K comparable, V any, S any](current map[K]V, incoming []S, keyOf func(S) K, convert func(S) V) map[K]V {
+	updated := current
+	copied := false
+
+	for _, entry := range incoming {
+		key := keyOf(entry)
+		if _, ok := updated[key]; ok {
+			continue
+		}
+		if !copied {
+			updated = make(map[K]V, len(current)+len(incoming))
+			maps.Copy(updated, current)
+			copied = true
+		}
+		updated[key] = convert(entry)
+	}
+
+	return updated
+}
+
 func addToDatabase(newDB *proto.SimDatabase) {
-	// create mutex lock here and lock it
-	// defer unlock it
 	mutex.Lock()
 	defer mutex.Unlock()
 
-	for _, v := range newDB.Items {
-		if _, ok := ItemsByID[v.Id]; !ok {
-			ItemsByID[v.Id] = ItemFromProto(v)
-		}
-	}
-
-	for _, v := range newDB.RandomSuffixes {
-		if _, ok := RandomSuffixesByID[v.Id]; !ok {
-			RandomSuffixesByID[v.Id] = RandomSuffixFromProto(v)
-		}
-	}
-
-	for _, v := range newDB.Enchants {
-		if _, ok := EnchantsByEffectID[v.EffectId]; !ok {
-			EnchantsByEffectID[v.EffectId] = EnchantFromProto(v)
-		}
-	}
-
-	for _, v := range newDB.Gems {
-		if _, ok := GemsByID[v.Id]; !ok {
-			GemsByID[v.Id] = GemFromProto(v)
-		}
-	}
-	for _, v := range newDB.ItemEffectRandPropPoints {
-		if _, ok := ItemEffectRandPropPointsByIlvl[v.Ilvl]; !ok {
-			ItemEffectRandPropPointsByIlvl[v.Ilvl] = ItemEffectRandPropPointsFromProto(v)
-		}
-	}
-	for _, v := range newDB.Consumables {
-		if _, ok := ConsumablesByID[v.Id]; !ok {
-			ConsumablesByID[v.Id] = ConsumableFromProto(v)
-		}
-	}
-	for _, v := range newDB.SpellEffects {
-		if _, ok := SpellEffectsById[v.Id]; !ok {
-			SpellEffectsById[v.Id] = v
-		}
-	}
+	ItemsByID = withAdditions(ItemsByID, newDB.Items, func(v *proto.SimItem) int32 { return v.Id }, ItemFromProto)
+	RandomSuffixesByID = withAdditions(RandomSuffixesByID, newDB.RandomSuffixes, func(v *proto.ItemRandomSuffix) int32 { return v.Id }, RandomSuffixFromProto)
+	EnchantsByEffectID = withAdditions(EnchantsByEffectID, newDB.Enchants, func(v *proto.SimEnchant) int32 { return v.EffectId }, EnchantFromProto)
+	GemsByID = withAdditions(GemsByID, newDB.Gems, func(v *proto.SimGem) int32 { return v.Id }, GemFromProto)
+	ItemEffectRandPropPointsByIlvl = withAdditions(
+		ItemEffectRandPropPointsByIlvl,
+		newDB.ItemEffectRandPropPoints,
+		func(v *proto.ItemEffectRandPropPoints) int32 { return v.Ilvl },
+		ItemEffectRandPropPointsFromProto,
+	)
+	ConsumablesByID = withAdditions(ConsumablesByID, newDB.Consumables, func(v *proto.Consumable) int32 { return v.Id }, ConsumableFromProto)
+	SpellEffectsById = withAdditions(
+		SpellEffectsById,
+		newDB.SpellEffects,
+		func(v *proto.SpellEffect) int32 { return v.Id },
+		func(v *proto.SpellEffect) *proto.SpellEffect { return v },
+	)
 }
 
 type ItemEffectRandPropPoints struct {
