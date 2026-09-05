@@ -1,0 +1,126 @@
+import * as OtherInputs from '../../core/components/inputs/other_inputs';
+import { ReforgeOptimizer } from '../../core/components/suggest_reforges_action';
+import { IndividualSimUI, registerSpecConfig } from '../../core/individual_sim_ui';
+import { Player } from '../../core/player';
+import { PlayerClasses } from '../../core/player_classes';
+import { APLRotation } from '../../core/proto/apl';
+import { ItemSlot, PseudoStat, Spec, Stat } from '../../core/proto/common';
+import { DEFAULT_HYBRID_CASTER_GEM_STATS, Stats, UnitStat } from '../../core/proto_utils/stats';
+import * as Presets from './presets';
+
+const SPEC_CONFIG = registerSpecConfig(Spec.SpecSmitePriest, {
+	cssClass: 'smite-priest-sim-ui',
+	cssScheme: PlayerClasses.getCssClass(PlayerClasses.Priest),
+	// List any known bugs / issues here and they'll be shown on the site.
+	knownIssues: [
+		"Only the damage half of the spec is modelled. Holy Concentration, Surge of Light's free Flash Heal and every other healing talent do nothing here.",
+		'Gear and EP presets are a starting point taken from the shadow sim, not a researched BiS list.',
+	],
+
+	// All stats for which EP should be calculated.
+	epStats: [
+		Stat.StatIntellect,
+		Stat.StatSpellDamage,
+		Stat.StatHolyDamage,
+		Stat.StatSpellHitRating,
+		Stat.StatSpellCritRating,
+		Stat.StatSpellHasteRating,
+		Stat.StatMana,
+		Stat.StatMP5,
+		Stat.StatSpirit,
+	],
+	epPseudoStats: [PseudoStat.PseudoStatSchoolHitPercentHoly],
+	// Reference stat against which to calculate EP.
+	epReferenceStat: Stat.StatSpellDamage,
+	// Which stats to display in the Character Stats section, at the bottom of the left-hand sidebar.
+	displayStats: UnitStat.createDisplayStatArray(
+		[
+			Stat.StatHealth,
+			Stat.StatMana,
+			Stat.StatMP5,
+			Stat.StatSpirit,
+			Stat.StatStamina,
+			Stat.StatIntellect,
+			Stat.StatSpellDamage,
+			Stat.StatHolyDamage,
+			Stat.StatArcaneResistance,
+			Stat.StatFireResistance,
+			Stat.StatFrostResistance,
+			Stat.StatNatureResistance,
+			Stat.StatShadowResistance,
+		],
+		[
+			PseudoStat.PseudoStatSpellHitPercent,
+			PseudoStat.PseudoStatSpellCritPercent,
+			PseudoStat.PseudoStatSpellHastePercent,
+			PseudoStat.PseudoStatSchoolHitPercentHoly,
+		],
+	),
+	gemStats: DEFAULT_HYBRID_CASTER_GEM_STATS,
+
+	defaults: {
+		// Default equipped gear.
+		gear: Presets.P3_PRESET.gear,
+		// Default EP weights for sorting gear in the gear picker.
+		epWeights: Presets.P3_EP_PRESET.epWeights,
+		// Holy has no Shadow Focus equivalent, so the cap is the plain 16% spell hit. Focused
+		// Power adds 4% on top, but only to Smite, so it cannot move a gear-wide cap.
+		statCaps: (() => {
+			return new Stats().withPseudoStat(PseudoStat.PseudoStatSpellHitPercent, 16);
+		})(),
+		// Default consumes settings.
+		consumables: Presets.DefaultConsumables,
+		// Default talents.
+		talents: Presets.StandardTalents.data,
+		// Default spec-specific settings.
+		specOptions: Presets.DefaultOptions,
+		// Default raid/party buffs settings.
+		raidBuffs: Presets.DefaultRaidBuffs,
+
+		partyBuffs: Presets.DefaultPartyBuffs,
+
+		individualBuffs: Presets.DefaultIndividualBuffs,
+
+		debuffs: Presets.DefaultDebuffs,
+
+		other: Presets.OtherDefaults,
+	},
+
+	// IconInputs to include in the 'Player' section on the settings tab.
+	playerIconInputs: [],
+	// Buff and Debuff inputs to include/exclude, overriding the EP-based defaults.
+	includeBuffDebuffInputs: [],
+	excludeBuffDebuffInputs: [],
+	// Inputs to include in the 'Other' section on the settings tab.
+	otherInputs: {
+		inputs: [OtherInputs.InputDelay, OtherInputs.ChannelClipDelay, OtherInputs.TankAssignment, OtherInputs.DistanceFromTarget],
+	},
+	itemSwapSlots: [ItemSlot.ItemSlotMainHand, ItemSlot.ItemSlotOffHand, ItemSlot.ItemSlotTrinket1, ItemSlot.ItemSlotTrinket2],
+	encounterPicker: {
+		// Whether to include 'Execute Duration (%)' in the 'Encounter' section of the settings tab.
+		showExecuteProportion: false,
+	},
+
+	presets: {
+		epWeights: [Presets.PRE_RAID_EP_PRESET, Presets.P3_EP_PRESET],
+		// Preset talents that the user can quickly select.
+		talents: [Presets.StandardTalents],
+		rotations: [Presets.ROTATION_PRESET_DEFAULT],
+		// Preset gear configurations that the user can quickly select.
+		gear: [Presets.PRE_RAID_PRESET, Presets.P1_PRESET, Presets.P2_PRESET, Presets.P3_PRESET, Presets.P4_PRESET, Presets.P5_PRESET],
+		itemSwaps: [],
+		builds: [],
+	},
+
+	autoRotation: (_: Player<Spec.SpecSmitePriest>): APLRotation => {
+		return Presets.ROTATION_PRESET_DEFAULT.rotation.rotation!;
+	},
+});
+
+export class SmitePriestSimUI extends IndividualSimUI<Spec.SpecSmitePriest> {
+	constructor(parentElem: HTMLElement, player: Player<Spec.SpecSmitePriest>) {
+		super(parentElem, player, SPEC_CONFIG);
+
+		this.reforger = new ReforgeOptimizer(this);
+	}
+}

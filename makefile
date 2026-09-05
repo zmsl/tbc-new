@@ -5,7 +5,10 @@ ASSETS := $(patsubst assets/%,$(OUT_DIR)/assets/%,$(ASSETS_INPUT))
 # Recursive wildcard function. Needs to be '=' instead of ':=' because of recursion.
 rwildcard = $(foreach d,$(wildcard $(1:=/*)),$(call rwildcard,$d,$2) $(filter $(subst *,%,$2),$d))
 GOROOT := $(shell go env GOROOT)
-UI_SRC := $(shell find ui -name '*.ts' -o -name '*.tsx' -o -name '*.scss' -o -name '*.html')
+# .json matters: gear sets, APL rotations, preset builds and the talent trees are all JSON
+# imported straight into the bundle. Without it, editing a preset leaves the bundle stale and
+# make reports nothing to do, so host/desktop builds silently ship the previous gear.
+UI_SRC := $(shell find ui -name '*.ts' -o -name '*.tsx' -o -name '*.scss' -o -name '*.html' -o -name '*.json')
 
 $(OUT_DIR)/.dirstamp: \
   $(OUT_DIR)/lib.wasm \
@@ -25,6 +28,11 @@ $(OUT_DIR)/bundle/.dirstamp: \
   ui/core/proto/api.ts
 	node_modules/typescript/bin/tsc --noEmit
 	npx tsx vite.build-workers.mts
+# Vite hashes chunk filenames and never removes the previous build's, so the directory
+# accumulates orphans that nothing references and every packaging target then embeds. Clearing
+# it first took the sidecar binary from 88MB to 33MB. Only bundle/ is emptied: the rest of
+# $(OUT_DIR) holds assets and lib.wasm that make builds through separate rules.
+	rm -rf $(OUT_DIR)/bundle
 	npx vite build
 	touch $@
 

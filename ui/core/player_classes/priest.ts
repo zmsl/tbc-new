@@ -1,6 +1,6 @@
 import { EligibleWeaponType, IconSize, PlayerClass } from '../player_class';
 import { PlayerSpec } from '../player_spec';
-import { Priest as PriestSpec } from '../player_specs/priest';
+import { Priest as PriestSpec, SmitePriest as SmitePriestSpec } from '../player_specs/priest';
 import { ArmorType, Class, Race, RangedWeaponType, WeaponType } from '../proto/common';
 import { PriestSpecs } from '../proto_utils/utils';
 
@@ -10,6 +10,7 @@ export class Priest extends PlayerClass<Class.ClassPriest> {
 	static hexColor = '#fff';
 	static specs: Record<string, PlayerSpec<PriestSpecs>> = {
 		[PriestSpec.friendlyName]: PriestSpec,
+		[SmitePriestSpec.friendlyName]: SmitePriestSpec,
 	};
 	static races: Race[] = [
 		// [H]

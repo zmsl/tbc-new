@@ -37,3 +37,38 @@ export class Priest extends PlayerSpec<Spec.SpecPriest> {
 		return Priest.getIcon(size);
 	};
 }
+
+export class SmitePriest extends PlayerSpec<Spec.SpecSmitePriest> {
+	static specIndex = 1;
+	static specID = Spec.SpecSmitePriest as Spec.SpecSmitePriest;
+	static classID = Class.ClassPriest as Class.ClassPriest;
+	static friendlyName = 'Smite';
+	static simLink = getSpecSiteUrl('priest', 'smite');
+
+	static isTankSpec = false;
+	static isHealingSpec = false;
+	static isRangedDpsSpec = true;
+	static isMeleeDpsSpec = false;
+	static canDualWield = false;
+
+	readonly specIndex = SmitePriest.specIndex;
+	readonly specID = SmitePriest.specID;
+	readonly classID = SmitePriest.classID;
+	readonly friendlyName = SmitePriest.friendlyName;
+	readonly simLink = SmitePriest.simLink;
+
+	readonly isTankSpec = SmitePriest.isTankSpec;
+	readonly isHealingSpec = SmitePriest.isHealingSpec;
+	readonly isRangedDpsSpec = SmitePriest.isRangedDpsSpec;
+	readonly isMeleeDpsSpec = SmitePriest.isMeleeDpsSpec;
+
+	readonly canDualWield = SmitePriest.canDualWield;
+
+	static getIcon = (size: IconSize): string => {
+		return `https://wow.zamimg.com/images/wow/icons/${size}/spell_holy_searinglight.jpg`;
+	};
+
+	getIcon = (size: IconSize): string => {
+		return SmitePriest.getIcon(size);
+	};
+}

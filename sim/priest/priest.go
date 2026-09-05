@@ -30,6 +30,7 @@ type Priest struct {
 	VampiricEmbrace *core.Spell
 	VampiricTouch   []*core.Spell
 	Smite           []*core.Spell
+	HolyFire        []*core.Spell
 	Starshards      []*core.Spell
 	HolyNova        []*core.Spell
 }
@@ -93,6 +94,7 @@ func (priest *Priest) ApplyTalents() {
 	priest.applyHolyNova()
 	priest.applyDivineFury()
 	priest.applySearingLight()
+	priest.applyHolySpecialization()
 	priest.applySurgeOfLight()
 	priest.applySpiritualGuidance()
 
@@ -137,36 +139,6 @@ func New(char *core.Character, selfBuffs SelfBuffs, talents string) *Priest {
 // Agent is a generic way to access underlying priest on any of the agents.
 type PriestAgent interface {
 	GetPriest() *Priest
-}
-
-func NewPriest(character *core.Character, options *proto.Player) *Priest {
-	classOptions := options.GetPriest().GetOptions().GetClassOptions()
-	selfBuffs := SelfBuffs{
-		UseShadowfiend: true,
-		PreShadowform:  classOptions.GetPreShadowform(),
-	}
-
-	basePriest := New(character, selfBuffs, options.TalentsString)
-	basePriest.Latency = float64(basePriest.ChannelClipDelay.Milliseconds())
-
-	return basePriest
-}
-
-func RegisterPriest() {
-	core.RegisterAgentFactory(
-		proto.Player_Priest{},
-		proto.Spec_SpecPriest,
-		func(character *core.Character, options *proto.Player, _ *proto.Raid) core.Agent {
-			return NewPriest(character, options)
-		},
-		func(player *proto.Player, spec interface{}) {
-			playerSpec, ok := spec.(*proto.Player_Priest)
-			if !ok {
-				panic("Invalid spec value for Priest!")
-			}
-			player.Spec = playerSpec
-		},
-	)
 }
 
 const (
