@@ -70,6 +70,7 @@ import { CURRENT_API_VERSION } from './constants/other';
 import { CHARACTER_LEVEL } from './constants/mechanics';
 import { ReforgeOptimizer } from './components/suggest_reforges_action';
 import Toast from './components/toast';
+import { setDesktopShareHandler, copyText } from './desktop';
 
 const SAVED_GEAR_STORAGE_KEY = '__savedGear__';
 const SAVED_EP_WEIGHTS_STORAGE_KEY = '__savedEPWeights__';
@@ -455,6 +456,23 @@ export abstract class IndividualSimUI<SpecType extends Spec> extends SimUI {
 	}
 
 	private addTopbarComponents() {
+		// Titlebar Share button: copies a link covering every shareable category, so it is a
+		// one-click "here is my whole setup". Picking specific categories, or a web link when
+		// the desktop default is not what you want, is what Export -> Link is for.
+		setDesktopShareHandler(() => {
+			try {
+				// No category argument: createLink then covers every shareable category, which is
+				// the same set as having all the boxes ticked in the Link dialog. Link type
+				// follows the same default as that dialog -- desktop inside the app.
+				const link = IndividualLinkExporter.createLink(this);
+				copyText(link)
+					.then(() => new Toast({ variant: 'success', body: 'Share link copied to clipboard.' }))
+					.catch(() => new Toast({ variant: 'error', body: 'Could not copy the link to the clipboard.' }));
+			} catch (error) {
+				new Toast({ variant: 'error', body: `Could not build a share link: ${(error as Error)?.message || error}` });
+			}
+		});
+
 		const jsonImporter = new IndividualJsonImporter(this.rootElem, this);
 		this.simHeader.addImportLink('JSON', jsonImporter);
 

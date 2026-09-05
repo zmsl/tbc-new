@@ -42,6 +42,9 @@ contextBridge.exposeInMainWorld('wowsimsDesktop', {
 	// and the sleep blocker are left behind.
 	reportSimDone: summary => ipcRenderer.send('wowsims:sim-done', summary),
 
+	// Copies via the OS clipboard directly, avoiding navigator.clipboard's focus requirement.
+	copyText: text => ipcRenderer.invoke('wowsims:copy-text', text),
+
 	// Native Save As. Resolves { saved: false } if the user cancels.
 	saveFile: (fileName, contents) => ipcRenderer.invoke('wowsims:save-file', { fileName, contents }),
 

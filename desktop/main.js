@@ -28,6 +28,13 @@ const DISCORD_URL = 'https://discord.gg/jJMPr9JWwx';
 // app's identity they are silently dropped -- no error, they simply never appear.
 const APP_ID = 'com.wowsims.tbc.desktop';
 
+// Height of the custom title strip, and the same number the CSS falls back to. On Windows
+// and Linux the system still draws the min/max/close buttons as an overlay at this height;
+// only the empty left-hand part of the bar becomes ours.
+const TITLEBAR_HEIGHT = 32;
+const TITLEBAR_BG = '#1d2021';
+const TITLEBAR_FG = '#d8d4cf';
+
 // macOS auto-update goes through Squirrel.Mac, which refuses to apply an update to an
 // unsigned app bundle — there is no way around this. Until the bundle is signed and
 // notarized, mac builds notify and link to the release page instead of updating in place.
@@ -217,7 +224,18 @@ function createWindow() {
 		height: state.height,
 		minWidth: 1024,
 		minHeight: 700,
-		backgroundColor: '#1d2021',
+		// Explicit because a hidden title bar is exactly the configuration where losing this
+		// is easy to do and hard to notice.
+		resizable: true,
+		maximizable: true,
+		backgroundColor: TITLEBAR_BG,
+		// Reclaims the title strip so the app can put a Share button in it. macOS keeps its
+		// traffic lights and has no titleBarOverlay support, so it gets the inset variant and
+		// the renderer pads around the lights instead.
+		titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
+		...(process.platform === 'darwin'
+			? {}
+			: { titleBarOverlay: { color: TITLEBAR_BG, symbolColor: TITLEBAR_FG, height: TITLEBAR_HEIGHT } }),
 		show: false,
 		autoHideMenuBar: true,
 		webPreferences: {
@@ -446,6 +464,14 @@ ipcMain.on('wowsims:sim-done', (_event, summary) => {
 		}
 	});
 	notification.show();
+});
+
+// navigator.clipboard.writeText refuses with NotAllowedError whenever the document is not
+// focused, which is easy to hit and produces a copy that silently did not happen. Electron's
+// clipboard has no such restriction.
+ipcMain.handle('wowsims:copy-text', (_event, text) => {
+	clipboard.writeText(String(text ?? ''));
+	return true;
 });
 
 // downloadString in the web UI builds a data: URL and clicks an <a download>, which in an

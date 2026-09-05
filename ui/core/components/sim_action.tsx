@@ -1,4 +1,4 @@
-import { reportSimDone, reportSimProgress } from '../desktop';
+import { reportSimDone, reportSimProgress, setTitlebarDps } from '../desktop';
 import clsx from 'clsx';
 import tippy from 'tippy.js';
 
@@ -51,6 +51,7 @@ export function addSimAction(simUI: SimUI): SimResultsManager {
 					resultsManager.setSimProgress(progress);
 					reportSimProgress(progress.completedIterations, progress.totalIterations);
 					if (progress.finalRaidResult && !progress.finalRaidResult.error) finalDps = progress.dps;
+					if (progress.dps) setTitlebarDps(`${progress.dps.toFixed(1)} DPS`);
 				});
 			} finally {
 				// In a finally so an aborted or failed run cleans up too: otherwise the
