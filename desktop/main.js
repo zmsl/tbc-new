@@ -147,16 +147,27 @@ function installProtocolHandler() {
 // handler is what makes clicking one anywhere -- Discord, a browser, a file -- open it here
 // instead of doing nothing. The scheme is the same one the UI is served over, so a deep link
 // is literally the in-app URL and needs no translation.
+//
+// Registration is rewritten on every launch, so the most recently launched copy owns the
+// scheme. That is deliberate and self-healing -- move or reinstall the app, run it once, and
+// links follow it -- but it does mean a stale copy left lying around will quietly take the
+// association back if you run it.
+//
+// A dev run is excluded: pointing the system-wide handler at a working checkout, which is
+// rebuilt and deleted freely, breaks links for the installed copy with no obvious cause. Set
+// WOWSIMS_REGISTER_PROTOCOL=1 to opt in when actually testing deep links in dev.
+//
+// To see which copy currently owns it on Windows:
+//   reg query "HKCU\Software\Classes\wowsims\shell\open\command"
 function registerProtocolHandler() {
 	if (process.defaultApp) {
+		if (process.env.WOWSIMS_REGISTER_PROTOCOL !== '1' || process.argv.length < 2) return;
 		// Unpackaged: the executable is Electron itself, so the registration has to name the
 		// script too or the OS would relaunch a bare Electron.
-		if (process.argv.length >= 2) {
-			app.setAsDefaultProtocolClient(SCHEME, process.execPath, [path.resolve(process.argv[1])]);
-		}
-	} else {
-		app.setAsDefaultProtocolClient(SCHEME);
+		app.setAsDefaultProtocolClient(SCHEME, process.execPath, [path.resolve(process.argv[1])]);
+		return;
 	}
+	app.setAsDefaultProtocolClient(SCHEME);
 }
 
 // Pulls a wowsims:// URL out of a command line. Windows and Linux deliver deep links as an

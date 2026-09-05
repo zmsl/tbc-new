@@ -93,6 +93,25 @@ installer until a certificate builds reputation).
 installers. Pointing it at upstream would make the first update silently replace this build
 with an upstream one.
 
+## Share links and the wowsims:// scheme
+
+The Link exporter offers **Web** (`https://wowsims.com/...`) and **Desktop app**
+(`wowsims://app/...`), defaulting to Desktop inside the app and Web everywhere else. A
+desktop link only works on a machine that has the app installed.
+
+The app registers itself as the OS handler for `wowsims://` on every launch, so **the most
+recently launched copy owns the scheme**. That is self-healing -- move or reinstall the app,
+run it once, and links follow it -- but a stale copy left on disk will take the association
+back if you run it. To see which copy currently owns it on Windows:
+
+```
+reg query "HKCU\Software\Classes\wowsims\shell\open\command"
+```
+
+Dev runs (`make desktop-dev`) deliberately do **not** register, so a working checkout cannot
+break links for an installed copy. Set `WOWSIMS_REGISTER_PROTOCOL=1` to opt in when testing
+deep links in dev.
+
 ## Migrating settings from the browser
 
 The desktop app has its own origin, so it cannot see settings saved at `wowsims.com` or
