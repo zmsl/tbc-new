@@ -1,3 +1,4 @@
+import { installFavoriteStars } from '../favorite_sim';
 import clsx from 'clsx';
 import { ref } from 'tsx-vanilla';
 
@@ -57,6 +58,8 @@ export class SimTitleDropdown extends Component {
 
 	private buildDropdown() {
 		PlayerClasses.naturalOrder.forEach(klass => this.dropdownMenu?.appendChild(<li>{this.buildClassDropdown(klass)}</li>));
+		// Same class rows as the landing page, same markup, so the same installer applies.
+		if (this.dropdownMenu) installFavoriteStars(this.dropdownMenu);
 	}
 
 	private buildClassDropdown(klass: PlayerClass<Class>) {

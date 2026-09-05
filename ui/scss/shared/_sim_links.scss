@@ -47,17 +47,23 @@
 	}
 }
 
-// Star that pins a sim as the one to open on startup. Sits on the landing page cards; the
-// same toggle exists in the sim toolbar, because once a favourite is set this page redirects
-// away and a control that lived only here would become unreachable.
-.sim-link {
+// Star that pins a sim as the one to open on startup. It sits on the class row, in both the
+// landing page list and the sim's spec switcher, which share this markup. Not on the spec
+// entries inside a menu: the row is what is visible without opening anything.
+//
+// Most class rows are a .sim-link-dropdown wrapper, but the single-sim ones on the landing
+// page are a bare anchor with no wrapper, so both need to anchor the star.
+.sim-link-dropdown,
+a.sim-link {
 	position: relative;
 
-	.sim-link-favorite {
+	> .sim-link-favorite {
 		position: absolute;
-		top: 0.35rem;
-		right: 0.5rem;
-		padding: 0.15rem 0.3rem;
+		top: 50%;
+		right: 0.75rem;
+		transform: translateY(-50%);
+		z-index: 2;
+		padding: 0.2rem 0.35rem;
 		color: rgb(255 255 255 / 25%);
 		font-size: 0.875rem;
 		line-height: 1;

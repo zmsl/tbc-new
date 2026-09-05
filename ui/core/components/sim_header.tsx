@@ -5,7 +5,7 @@ import { ref } from 'tsx-vanilla';
 import i18n from '../../i18n/config';
 import { REPO_CHOOSE_NEW_ISSUE_URL, REPO_RELEASES_URL } from '../constants/other';
 import { DesktopBridge, DesktopUpdateInfo, getDesktop } from '../desktop';
-import { isFavoriteSim, setFavoriteSim, simPathOf } from '../favorite_sim';
+import { getFavoriteSim, onFavoriteChange, setFavoriteSim, simPathOf } from '../favorite_sim';
 import { SimUI } from '../sim_ui';
 import { isLocal, noop } from '../utils';
 import { Component } from './component';
@@ -162,11 +162,11 @@ export class SimHeader extends Component {
 	// redirects away immediately, so a toggle that existed only there would be unreachable
 	// the moment it was used.
 	private addFavoriteLink() {
-		const href = window.location.href;
+		const path = simPathOf(window.location.href);
 		let link: TippyReferenceElement<HTMLElement>;
 
 		const render = () => {
-			const on = isFavoriteSim(href);
+			const on = getFavoriteSim() === path;
 			link.classList.toggle('favorite-on', on);
 			const icon = link.querySelector('i');
 			if (icon) icon.className = `${on ? 'fas' : 'far'} fa-star fa-lg`;
@@ -178,12 +178,11 @@ export class SimHeader extends Component {
 			icon: 'far fa-star fa-lg',
 			tooltip: 'Open this sim on startup',
 			classes: 'favorite-sim',
-			onclick: () => {
-				setFavoriteSim(isFavoriteSim(href) ? null : simPathOf(href));
-				render();
-			},
+			onclick: () => setFavoriteSim(getFavoriteSim() === path ? null : path),
 		}) as TippyReferenceElement<HTMLElement>;
 
+		// Also restyles when the star in the spec switcher is used.
+		onFavoriteChange(render);
 		render();
 	}
 
