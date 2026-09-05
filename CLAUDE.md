@@ -141,6 +141,13 @@ races / gear sets / talents / rotations and writes DPS, TPS, and stat weights in
 flake). On mismatch the run writes `*.results.tmp`; inspect the diff, and if the change is
 intended run `make update-tests` to promote it.
 
+`TestGearPresetsAreEquippable` (`sim/core/gear_validation_test.go`) additionally checks every
+`*.gear.json` in the repo against the rules that decide whether gear could actually be worn --
+enchant applicability, meta gem activation, unique-equipped items and gems, slot correctness,
+two-hander plus off-hand. Those rules used to exist only in the TypeScript client, so anything
+not written through the UI bypassed them; they now live in `sim/core/gear_validation.go`.
+Presets that are known-broken are listed in `knownUnequippableGearSets` with the reason.
+
 The generator reads its fixtures **out of the UI tree** — e.g.
 `core.GetGearSet("../../../ui/shaman/elemental/gear_sets", "p1_a")` and
 `core.GetAplRotation("../../../ui/shaman/elemental/apls", "default")`. Editing a
