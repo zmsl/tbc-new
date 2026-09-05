@@ -18,6 +18,7 @@ import {
 	Individual60UImporter,
 	IndividualAddonImporter,
 	IndividualJsonImporter,
+	IndividualLinkPasteImporter,
 	IndividualLinkImporter,
 	IndividualWowheadGearPlannerImporter,
 } from './components/individual_sim_ui/importers';
@@ -454,7 +455,18 @@ export abstract class IndividualSimUI<SpecType extends Spec> extends SimUI {
 	}
 
 	private addTopbarComponents() {
-		this.simHeader.addImportLink('JSON', new IndividualJsonImporter(this.rootElem, this));
+		const jsonImporter = new IndividualJsonImporter(this.rootElem, this);
+		this.simHeader.addImportLink('JSON', jsonImporter);
+
+		// A settings file dropped onto the desktop app window imports exactly as
+		// Import -> JSON does. Dispatched from ui/core/desktop.ts; never fires on the website.
+		document.addEventListener('wowsims:import-json', event => {
+			jsonImporter.onImport((event as CustomEvent<string>).detail).catch(error => {
+				// Bypassing the dialog means bypassing where it would normally show errors.
+				new Toast({ variant: 'error', body: `Could not import that file: ${error?.message || error}` });
+			});
+		});
+		this.simHeader.addImportLink('Link', new IndividualLinkPasteImporter(this.rootElem, this));
 		this.simHeader.addImportLink('60U TBC', new Individual60UImporter(this.rootElem, this));
 		this.simHeader.addImportLink('WoWHead', new IndividualWowheadGearPlannerImporter(this.rootElem, this), false);
 		this.simHeader.addImportLink('Addon', new IndividualAddonImporter(this.rootElem, this));

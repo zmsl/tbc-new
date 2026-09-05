@@ -4,6 +4,7 @@ import { SIM_CATEGORY_KEYS, SimSettingCategories } from '../../../constants/sim_
 import { IndividualSimUI } from '../../../individual_sim_ui';
 import { Spec } from '../../../proto/common';
 import { IndividualSimSettings } from '../../../proto/ui';
+import { getShareableUrl } from '../../../desktop';
 import { arrayEquals, getEnumValues } from '../../../utils';
 import { IndividualImporter } from '../importers/individual_importer';
 import { IndividualExporter } from './individual_exporter';
@@ -34,7 +35,9 @@ export class IndividualLinkExporter<SpecType extends Spec> extends IndividualExp
 		const deflated = pako.deflate(protoBytes, { to: 'string' });
 		const encoded = btoa(String.fromCharCode(...deflated));
 
-		const linkUrl = new URL(window.location.href);
+		// Not window.location: in the desktop app that origin is wowsims://app, which would
+		// produce a link that only opens on the machine that made it.
+		const linkUrl = getShareableUrl();
 		linkUrl.hash = encoded;
 		if (arrayEquals(exportCategories, IndividualImporter.DEFAULT_CATEGORIES)) {
 			linkUrl.searchParams.delete(IndividualImporter.CATEGORY_PARAM);

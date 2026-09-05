@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, dialog, ipcMain, net, protocol, shell } = require('electron');
+const { app, BrowserWindow, Menu, Notification, clipboard, dialog, ipcMain, net, powerSaveBlocker, protocol, shell } = require('electron');
 const { spawn } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -21,6 +21,12 @@ const READY_PREFIX = 'WOWSIMS_LISTENING port=';
 const SIDECAR_START_TIMEOUT_MS = 30_000;
 
 const RELEASES_URL = 'https://github.com/zmsl/tbc-new/releases/latest';
+const REPO_URL = 'https://github.com/zmsl/tbc-new';
+const DISCORD_URL = 'https://discord.gg/jJMPr9JWwx';
+
+// Windows ties notifications to an AppUserModelID. Without this matching the installed
+// app's identity they are silently dropped -- no error, they simply never appear.
+const APP_ID = 'com.wowsims.tbc.desktop';
 
 // macOS auto-update goes through Squirrel.Mac, which refuses to apply an update to an
 // unsigned app bundle — there is no way around this. Until the bundle is signed and
@@ -31,6 +37,7 @@ const MAC_AUTO_UPDATE_SUPPORTED = false;
 let simProcess = null;
 let simPort = 0;
 let mainWindow = null;
+let powerBlockerId = null;
 
 protocol.registerSchemesAsPrivileged([
 	{
@@ -150,7 +157,7 @@ function saveWindowState(win) {
 	if (!win || win.isDestroyed()) return;
 	try {
 		const b = win.getNormalBounds();
-		fs.writeFileSync(windowStateFile(), JSON.stringify({ ...b, maximized: win.isMaximized() }));
+		fs.writeFileSync(windowStateFile(), JSON.stringify({ ...b, maximized: win.isMaximized(), zoomLevel: win.webContents.getZoomLevel() }));
 	} catch (err) {
 		console.error('[window] could not save state', err);
 	}
@@ -183,7 +190,11 @@ function createWindow() {
 	});
 
 	if (state.maximized) mainWindow.maximize();
-	mainWindow.once('ready-to-show', () => mainWindow.show());
+	mainWindow.once('ready-to-show', () => {
+		if (Number.isFinite(state.zoomLevel)) mainWindow.webContents.setZoomLevel(state.zoomLevel);
+		mainWindow.show();
+	});
+	mainWindow.webContents.on('zoom-changed', () => saveWindowState(mainWindow));
 	mainWindow.on('close', () => saveWindowState(mainWindow));
 	mainWindow.on('closed', () => {
 		mainWindow = null;
@@ -204,8 +215,127 @@ function createWindow() {
 		}
 	});
 
+	// A dead renderer leaves a blank window that looks like a hang. The sidecar is a
+	// separate process and survives, so reloading actually recovers.
+	mainWindow.webContents.on('render-process-gone', (_event, details) => {
+		if (details.reason === 'clean-exit') return;
+		const response = dialog.showMessageBoxSync(mainWindow, {
+			type: 'error',
+			title: 'Display crashed',
+			message: 'The sim window stopped responding.',
+			detail: `Reason: ${details.reason}. Your saved settings are safe.`,
+			buttons: ['Reload', 'Quit'],
+			defaultId: 0,
+		});
+		if (response === 0) mainWindow.reload();
+		else app.quit();
+	});
+
+	buildAppMenu(mainWindow);
+	installContextMenu(mainWindow);
+
 	mainWindow.loadURL(START_URL);
 	return mainWindow;
+}
+
+// Without this Electron installs its own default menu, which carries Electron's branding
+// and links to electronjs.org. Menu labels are English only: the menu lives in the main
+// process, which has no access to the renderer's i18next instance.
+function buildAppMenu(win) {
+	const isMac = process.platform === 'darwin';
+	const send = channel => () => win && !win.isDestroyed() && win.webContents.send(channel);
+
+	const template = [
+		...(isMac ? [{ role: 'appMenu' }] : []),
+		{
+			label: '&File',
+			submenu: [
+				{ label: 'Import Settings...', accelerator: 'CmdOrCtrl+O', click: send('wowsims:menu-import') },
+				{ label: 'Export Settings...', accelerator: 'CmdOrCtrl+S', click: send('wowsims:menu-export') },
+				{ type: 'separator' },
+				{ role: isMac ? 'close' : 'quit' },
+			],
+		},
+		{ role: 'editMenu' },
+		{
+			label: '&Sim',
+			submenu: [
+				// Ctrl+R is the muscle memory for "run" in a simulator, so it wins here and
+				// the built-in reload role moves down to Ctrl+Shift+R.
+				{ label: 'Run Simulation', accelerator: 'CmdOrCtrl+R', click: send('wowsims:menu-run-sim') },
+			],
+		},
+		{
+			label: '&View',
+			submenu: [
+				{ role: 'reload', accelerator: 'CmdOrCtrl+Shift+R' },
+				{ type: 'separator' },
+				{ role: 'resetZoom' },
+				{ role: 'zoomIn' },
+				// The role only binds Ctrl+= / Ctrl+Shift+=; people press Ctrl+- and also
+				// expect the numpad keys to work.
+				{ role: 'zoomIn', accelerator: 'CmdOrCtrl+numadd', visible: false },
+				{ role: 'zoomOut' },
+				{ role: 'zoomOut', accelerator: 'CmdOrCtrl+numsub', visible: false },
+				{ type: 'separator' },
+				{ role: 'togglefullscreen' },
+				{ role: 'toggleDevTools' },
+			],
+		},
+		{ role: 'windowMenu' },
+		{
+			label: '&Help',
+			submenu: [
+				{ label: 'Discord', click: () => shell.openExternal(DISCORD_URL) },
+				{ label: 'Source Code', click: () => shell.openExternal(REPO_URL) },
+				{ label: 'Releases', click: () => shell.openExternal(RELEASES_URL) },
+				{ type: 'separator' },
+				{
+					label: 'About',
+					click: () =>
+						dialog.showMessageBox(win, {
+							type: 'info',
+							title: 'WoWSims TBC',
+							message: 'WoWSims TBC',
+							detail: `Version ${app.getVersion()}\nElectron ${process.versions.electron}\nChromium ${process.versions.chrome}`,
+							buttons: ['OK'],
+						}),
+				},
+			],
+		},
+	];
+
+	Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
+// Electron ships no context menu at all, which leaves text inputs with no copy or paste --
+// the clearest sign to a user that they are not looking at a real application.
+function installContextMenu(win) {
+	win.webContents.on('context-menu', (_event, params) => {
+		const items = [];
+		const canEdit = params.isEditable;
+
+		if (params.misspelledWord && params.dictionarySuggestions.length) {
+			for (const suggestion of params.dictionarySuggestions.slice(0, 5)) {
+				items.push({ label: suggestion, click: () => win.webContents.replaceMisspelling(suggestion) });
+			}
+			items.push({ type: 'separator' });
+		}
+		if (canEdit) items.push({ role: 'undo', enabled: params.editFlags.canUndo }, { role: 'redo', enabled: params.editFlags.canRedo }, { type: 'separator' });
+		if (canEdit) items.push({ role: 'cut', enabled: params.editFlags.canCut });
+		items.push({ role: 'copy', enabled: params.editFlags.canCopy });
+		if (canEdit) items.push({ role: 'paste', enabled: params.editFlags.canPaste });
+		items.push({ role: 'selectAll', enabled: params.editFlags.canSelectAll });
+
+		if (params.linkURL && params.linkURL.startsWith('http')) {
+			items.push({ type: 'separator' }, { label: 'Copy Link Address', click: () => clipboard.writeText(params.linkURL) });
+		}
+		if (!app.isPackaged) {
+			items.push({ type: 'separator' }, { label: 'Inspect Element', click: () => win.webContents.inspectElement(params.x, params.y) });
+		}
+
+		Menu.buildFromTemplate(items).popup({ window: win });
+	});
 }
 
 function setupAutoUpdate(win) {
@@ -231,6 +361,61 @@ function setupAutoUpdate(win) {
 
 	autoUpdater.checkForUpdates().catch(err => console.error('[updater] check failed', err));
 }
+
+// A long sim is exactly the kind of work you start and then alt-tab away from, so it
+// should behave like any other long-running desktop task: show progress on the taskbar
+// button, keep the machine awake, and say something when it is done.
+ipcMain.on('wowsims:sim-progress', (_event, fraction) => {
+	if (!mainWindow || mainWindow.isDestroyed()) return;
+	// setProgressBar clamps, but guard NaN from a zero total before iterations are known.
+	mainWindow.setProgressBar(Number.isFinite(fraction) ? Math.max(0, Math.min(1, fraction)) : 2);
+
+	if (powerBlockerId === null) {
+		powerBlockerId = powerSaveBlocker.start('prevent-app-suspension');
+	}
+});
+
+const releasePowerBlocker = () => {
+	if (powerBlockerId !== null && powerSaveBlocker.isStarted(powerBlockerId)) {
+		powerSaveBlocker.stop(powerBlockerId);
+	}
+	powerBlockerId = null;
+};
+
+// Called on completion AND on abort/error, so neither the progress bar nor the sleep
+// blocker can be left behind by a sim that did not finish normally.
+ipcMain.on('wowsims:sim-done', (_event, summary) => {
+	if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setProgressBar(-1);
+	releasePowerBlocker();
+
+	if (!summary || !summary.notify) return;
+	// Only worth interrupting for if they are looking at something else.
+	if (mainWindow && !mainWindow.isDestroyed() && mainWindow.isFocused()) return;
+	if (!Notification.isSupported()) return;
+
+	const notification = new Notification({ title: 'Simulation complete', body: summary.body || '' });
+	notification.on('click', () => {
+		if (mainWindow && !mainWindow.isDestroyed()) {
+			if (mainWindow.isMinimized()) mainWindow.restore();
+			mainWindow.focus();
+		}
+	});
+	notification.show();
+});
+
+// downloadString in the web UI builds a data: URL and clicks an <a download>, which in an
+// installed app drops the file into Downloads with no dialog and no way to choose a name.
+ipcMain.handle('wowsims:save-file', async (_event, { fileName, contents }) => {
+	if (!mainWindow || mainWindow.isDestroyed()) return { saved: false };
+	const ext = path.extname(fileName || '').replace('.', '') || 'json';
+	const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+		defaultPath: fileName || `wowsims.${ext}`,
+		filters: [{ name: ext.toUpperCase(), extensions: [ext] }, { name: 'All Files', extensions: ['*'] }],
+	});
+	if (canceled || !filePath) return { saved: false };
+	await fs.promises.writeFile(filePath, contents, 'utf8');
+	return { saved: true, filePath };
+});
 
 ipcMain.handle('wowsims:start-update', async () => {
 	if (process.platform === 'darwin' && !MAC_AUTO_UPDATE_SUPPORTED) {
@@ -270,6 +455,8 @@ if (!app.requestSingleInstanceLock()) {
 	});
 
 	app.whenReady().then(async () => {
+		// Must be set before any notification is created, or Windows drops them silently.
+		if (process.platform === 'win32') app.setAppUserModelId(APP_ID);
 		try {
 			simPort = await startSidecar();
 		} catch (err) {
@@ -290,6 +477,7 @@ app.on('window-all-closed', () => app.quit());
 
 app.on('before-quit', () => {
 	app.isQuitting = true;
+	releasePowerBlocker();
 	stopSidecar();
 });
 

@@ -28,6 +28,23 @@ contextBridge.exposeInMainWorld('wowsimsDesktop', {
 	// say "enabled", not "disabled_software".
 	getGpuStatus: () => ipcRenderer.invoke('wowsims:gpu-status'),
 
+	// Menu items that need the renderer to act. The menu lives in the main process and has
+	// no idea what a sim is, so it just forwards the intent.
+	onMenuCommand: callback => {
+		const offs = ['run-sim', 'import', 'export'].map(name => on(`wowsims:menu-${name}`, () => callback(name)));
+		return () => offs.forEach(off => off());
+	},
+
+	// Sim lifecycle -> taskbar progress button, sleep blocker, completion notification.
+	// fraction outside 0..1 leaves the progress bar indeterminate.
+	reportSimProgress: fraction => ipcRenderer.send('wowsims:sim-progress', fraction),
+	// Always call this when a run ends, including on abort or error, or the taskbar progress
+	// and the sleep blocker are left behind.
+	reportSimDone: summary => ipcRenderer.send('wowsims:sim-done', summary),
+
+	// Native Save As. Resolves { saved: false } if the user cancels.
+	saveFile: (fileName, contents) => ipcRenderer.invoke('wowsims:save-file', { fileName, contents }),
+
 	// Begins the download. Resolves `{ openedExternally: true }` when the platform cannot
 	// self-update and the release page was opened in the browser instead.
 	startUpdate: () => ipcRenderer.invoke('wowsims:start-update'),
