@@ -3,9 +3,6 @@ package main
 // #include <stdlib.h>
 import "C"
 import (
-	"bytes"
-	"compress/zlib"
-	"encoding/base64"
 	"encoding/json"
 	"log"
 	"unsafe"
@@ -15,7 +12,6 @@ import (
 	"github.com/wowsims/tbc/sim/core/proto"
 	"github.com/wowsims/tbc/sim/core/simsignals"
 	"google.golang.org/protobuf/encoding/protojson"
-	goproto "google.golang.org/protobuf/proto"
 )
 
 var _default_rsr = proto.RaidSimRequest{
@@ -81,16 +77,11 @@ func encodeSettings(json *C.char) *C.char {
 		Player:     input.Raid.Parties[0].Players[0],
 		Encounter:  input.Encounter,
 	}
-	var buffer bytes.Buffer
-	data, err := goproto.Marshal(settings)
+	out, err := core.EncodeShareSettings(settings)
 	if err != nil {
 		panic(err)
 	}
-	writer := zlib.NewWriter(&buffer)
-	writer.Write(data)
-	writer.Close()
-	out := base64.StdEncoding.EncodeToString(buffer.Bytes())
-	return C.CString(string(out))
+	return C.CString(out)
 }
 
 //export getDatabase
