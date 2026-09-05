@@ -40,20 +40,52 @@ const wowheadUrlFor = (start: HTMLElement): string | null => {
 
 let installed = false;
 
-// The tab rendered under every tooltip by scss/shared/_wowhead_tooltip.scss reads its text
-// from here, because the modifier differs by platform: ctrl+click is a right-click on macOS,
-// so Cmd is the equivalent there.
-const setHintLabel = () => {
-	const isMac = /mac/i.test(navigator.platform) || /Mac OS X/.test(navigator.userAgent);
-	const label = isMac ? '\u2318+Click to open in Wowhead' : 'Ctrl+Click to open in Wowhead';
-	// JSON.stringify supplies the quotes that a CSS content value needs.
-	document.documentElement.style.setProperty('--wowhead-hint-label', JSON.stringify(label));
+const TAB_CLASS = 'wowsims-wowhead-tab';
+
+const isMacPlatform = () => /mac/i.test(navigator.platform) || /Mac OS X/.test(navigator.userAgent);
+
+// Built as elements rather than CSS content so the modifier can be styled on its own -- a
+// content string is one run of text and cannot be part-styled. It also frees both of the
+// tooltip's pseudo-elements, which the tab's shape needs.
+const buildTab = (): HTMLElement => {
+	const tab = document.createElement('div');
+	tab.className = TAB_CLASS;
+
+	const key = document.createElement('span');
+	key.className = `${TAB_CLASS}__key`;
+	// Ctrl+click is a right click on macOS, so Cmd is the equivalent there.
+	key.textContent = isMacPlatform() ? '\u2318+Click' : 'Ctrl+Click';
+
+	tab.append(key, document.createTextNode(' to open in Wowhead'));
+	return tab;
+};
+
+const decorate = (tooltip: HTMLElement) => {
+	// Also the guard that stops the per-tooltip observer below from recursing on its own
+	// insertion.
+	if (tooltip.querySelector(`.${TAB_CLASS}`)) return;
+	tooltip.appendChild(buildTab());
+
+	if (!tooltip.dataset.wowsimsTabWatched) {
+		tooltip.dataset.wowsimsTabWatched = '1';
+		// Wowhead rebuilds a tooltip's contents when it is reused for a different item, which
+		// takes the tab with it.
+		new MutationObserver(() => decorate(tooltip)).observe(tooltip, { childList: true });
+	}
+};
+
+const installTooltipTab = () => {
+	const scan = () => document.querySelectorAll<HTMLElement>('.wowhead-tooltip').forEach(decorate);
+	// Tooltips are appended straight to the body, so watching its direct children is enough
+	// and avoids a subtree observer firing constantly on a DOM this size.
+	new MutationObserver(scan).observe(document.body, { childList: true });
+	scan();
 };
 
 export const installWowheadCtrlClick = () => {
 	if (installed) return;
 	installed = true;
-	setHintLabel();
+	installTooltipTab();
 
 	document.addEventListener(
 		'click',
