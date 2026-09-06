@@ -261,6 +261,68 @@ desktop-preview-win: $(DESKTOP_DIR)/node_modules $(DESKTOP_ICON) desktop-sidecar
 desktop-dev: $(DESKTOP_DIR)/node_modules wowsimtbc
 	cd $(DESKTOP_DIR) && npm start
 
+# ---- MCP server -------------------------------------------------------------------------
+# Like the desktop shell, deliberately off the default build path. It is its own Go module, so
+# the MCP SDK never enters the root go.mod and `go build ./...`, `make test` and the four CI
+# shards (which list ./sim/...) never see any of it. The trade is that a breaking change in
+# sim/core only shows up here, so run `make mcp-test` when changing the engine's API.
+
+MCP_DIR     := mcp
+MCP_LDFLAGS := -X 'main.Version=$(VERSION)' -s -w
+
+MCP_PRESETS := $(MCP_DIR)/internal/presets/files
+
+# The gear sets, rotations, builds and talent presets are compiled into the binary so it needs
+# nothing but itself at runtime. They are copied out of ui/ on every build rather than committed
+# under mcp/: one copy in the repository, and no chance of the two drifting.
+.PHONY: mcp-presets
+mcp-presets:
+	rm -rf $(MCP_PRESETS)
+	mkdir -p $(MCP_PRESETS)
+	touch $(MCP_PRESETS)/.gitkeep
+	cd ui && find . -path './*/*/*' \( -name '*.gear.json' -o -name '*.apl.json' -o -name '*.build.json' \) -print \
+	  -o -path './*/*/presets.ts' -print \
+	  | while read -r f; do \
+	      mkdir -p "../$(MCP_PRESETS)/$$(dirname "$$f")"; \
+	      cp "$$f" "../$(MCP_PRESETS)/$$f"; \
+	    done
+
+# with_db is not optional in practice: without it every item lookup comes back empty.
+.PHONY: mcp
+mcp: sim/core/proto/api.pb.go mcp-presets
+	cd $(MCP_DIR) && go build --tags=with_db -o ../wowsimmcp -ldflags="$(MCP_LDFLAGS)" .
+
+# Claude Desktop runs on Windows and macOS, and cannot execute a Linux binary sitting in WSL
+# without going through wsl.exe. Building the .exe removes that hop.
+.PHONY: mcp-windows
+mcp-windows: sim/core/proto/api.pb.go mcp-presets
+	cd $(MCP_DIR) && GOOS=windows GOARCH=amd64 GOAMD64=v2 go build --tags=with_db -o ../wowsimmcp.exe -ldflags="$(MCP_LDFLAGS)" .
+
+.PHONY: mcp-test
+mcp-test: sim/core/proto/api.pb.go mcp-presets
+	cd $(MCP_DIR) && GOARCH=amd64 go test --tags=with_db ./...
+
+MCP_BUNDLE_DIR := $(MCP_DIR)/dist/mcpb
+
+# Packs a Claude Desktop bundle: a zip carrying the server and a manifest describing it, which
+# installs by being opened. Windows only, because that is where Claude Desktop runs here and a
+# bundle should not carry binaries nobody has run.
+.PHONY: mcp-bundle
+mcp-bundle: mcp-windows
+	cd $(MCP_DIR) && go run --tags=with_db ./cmd/genmanifest
+	rm -rf $(MCP_BUNDLE_DIR) wowsims-tbc.mcpb
+	mkdir -p $(MCP_BUNDLE_DIR)/server
+	cp wowsimmcp.exe $(MCP_BUNDLE_DIR)/server/
+	cp $(MCP_DIR)/mcpb/manifest.json $(MCP_BUNDLE_DIR)/
+	cp assets/favicon_io/android-chrome-512x512.png $(MCP_BUNDLE_DIR)/icon.png
+	cd $(MCP_BUNDLE_DIR) && zip -qr ../../../wowsims-tbc.mcpb .
+	@echo "packed wowsims-tbc.mcpb -- open it with Claude Desktop to install"
+
+# Regenerates mcp/docs/TOOLS.md from the registry. Never edit that file by hand.
+.PHONY: mcp-docs
+mcp-docs: sim/core/proto/api.pb.go
+	cd $(MCP_DIR) && go run --tags=with_db ./cmd/gendocs
+
 sim/core/proto/api.pb.go: proto/*.proto
 	@if go version -m "$$(command -v protoc-gen-go)" 2>/dev/null | grep -qE '^[[:space:]]+mod[[:space:]]+github\.com/golang/protobuf[[:space:]]'; then \
 		echo "ERROR: your protoc-gen-go is the deprecated github.com/golang/protobuf plugin;"; \
