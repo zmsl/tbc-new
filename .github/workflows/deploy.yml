@@ -7,8 +7,17 @@ jobs:
     tests:
         uses: ./.github/workflows/run_tests.yml
 
+    # Upstream only. This job publishes wowsims.com/tbc by force-pushing the built client to
+    # wowsims/pages-deploy, using a token no fork has -- and a fork that did have one would
+    # overwrite the live site with its own build. It also opens and auto-merges a pull request
+    # whenever .deployedprotoversion moves, which records what is live on that site and means
+    # nothing anywhere else.
+    #
+    # The tests job above still runs everywhere, so a fork keeps its master-push signal; nothing
+    # is lost by skipping this, because tests/build-ui already builds the client.
     build-and-deploy:
         needs: tests
+        if: github.repository == 'wowsims/tbc-new'
         runs-on: ubuntu-latest
         permissions:
             contents: write
