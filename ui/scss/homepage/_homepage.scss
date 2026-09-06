@@ -131,6 +131,20 @@
 					margin-right: 25%;
 				}
 
+				// A single-sim class nests its link inside another .sim-links, which then
+				// matches the column rule above and comes out a quarter of the row wide --
+				// so its hover highlight only covered the text. Overriding from the shared
+				// stylesheet cannot win here: that selector carries an id and three classes.
+				.sim-link-dropdown > .sim-links {
+					width: 100%;
+
+					> .sim-link {
+						max-width: 100%;
+						flex: 1 1 100%;
+						margin-right: 0;
+					}
+				}
+
 				.sim-link,
 				.sim-link-dropdown {
 					width: 100%;

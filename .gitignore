@@ -19,6 +19,9 @@ binary_dist
 sim/web/__debug_bin
 /wowsimcli*
 /wowsimtbc*
+/wowsimmcp*
+*.mcpb
+mcp/dist/
 
 # temporary files
 *.results.tmp
@@ -52,3 +55,12 @@ tools/db2tool/listfile.csv
 tools/db2tool/DBDCache/
 tools/db2tool/dbfilesclient/
 tools/db2tool/caches/
+
+# MCP presets, copied out of ui/ at build time
+mcp/internal/presets/files/*
+!mcp/internal/presets/files/.gitkeep
+
+# electron desktop shell
+desktop/node_modules
+desktop/build/
+desktop-dist/

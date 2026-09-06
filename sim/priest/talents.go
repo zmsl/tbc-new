@@ -120,7 +120,19 @@ func (priest *Priest) applySearingLight() {
 	priest.AddStaticMod(core.SpellModConfig{
 		Kind:       core.SpellMod_DamageDone_Flat,
 		FloatValue: 0.05 * float64(priest.Talents.SearingLight),
-		ClassMask:  PriestSpellSmite | PriestSpellHolyFire,
+		ClassMask:  PriestHolySpells,
+	})
+}
+
+func (priest *Priest) applyHolySpecialization() {
+	if priest.Talents.HolySpecialization == 0 {
+		return
+	}
+	// +1% crit per rank
+	priest.AddStaticMod(core.SpellModConfig{
+		Kind:       core.SpellMod_BonusCrit_Percent,
+		FloatValue: 1.0 * float64(priest.Talents.HolySpecialization),
+		ClassMask:  PriestHolySpells,
 	})
 }
 

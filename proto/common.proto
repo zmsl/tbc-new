@@ -56,6 +56,7 @@ enum Spec {
 	SpecRetributionPaladin = 9;
 
 	SpecPriest = 10;
+	SpecSmitePriest = 18;
 
 	SpecRogue = 11;
 

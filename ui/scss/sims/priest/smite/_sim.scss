@@ -1,0 +1,4 @@
+// Set color variables which control the site theme.
+.smite-priest-sim-ui {
+	@include theme-color($priest, 0.95, '/tbc/assets/img/smite_priest_background.jpg');
+}

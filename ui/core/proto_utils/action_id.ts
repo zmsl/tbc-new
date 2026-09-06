@@ -532,6 +532,8 @@ export class ActionId {
 			case 'Maul':
 				if (tag == 1) {
 					name += ' (Queue)';
+				} else if (tag == 2) {
+					name += ' (Queue, Cancel)';
 				}
 				break;
 			case 'Sweeping Strikes':

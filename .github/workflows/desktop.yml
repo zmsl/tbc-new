@@ -1,0 +1,28 @@
+name: Desktop
+
+# The desktop app is otherwise built only when a release is cut, which is a late moment to find
+# out that packaging broke. This runs the same build on pull requests that touch it, and keeps
+# the installers as run artifacts so they can be tried before merging.
+on:
+    pull_request:
+        branches:
+            - master
+        paths:
+            - 'desktop/**'
+            - 'tools/desktop/**'
+            - '.github/workflows/desktop.yml'
+            - '.github/workflows/desktop_build.yml'
+
+jobs:
+    build:
+        permissions:
+            contents: read
+        uses: ./.github/workflows/desktop_build.yml
+        with:
+            # No ref: the default pull_request checkout is the merge commit, which is what
+            # would actually land, rather than the branch tip on its own.
+            #
+            # electron-builder insists on a semver version; a prerelease built from the pull
+            # request number keeps these builds from ever looking newer than a real release.
+            tag: v0.0.0-pr${{ github.event.number }}
+            publish: false

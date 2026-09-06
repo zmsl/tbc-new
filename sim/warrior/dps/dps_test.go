@@ -9,6 +9,31 @@ import (
 	"testing"
 )
 
+// Unhides queue-cancel groups in a fresh copy of the shipped fury preset. Mutating the
+// preset here, rather than checking in a near-duplicate .apl.json, keeps the tested
+// rotation from drifting away from the one users get. GetAplRotation re-reads the file
+// on every call, so each variant starts from a clean copy.
+func furyRotationWithGroups(label string, groupNames ...string) core.RotationCombo {
+	combo := core.GetAplRotation("../../../ui/warrior/dps/apls", "fury")
+	combo.Label = label
+
+	for _, name := range groupNames {
+		found := false
+		for _, item := range combo.Rotation.PriorityList {
+			if group := item.GetAction().GetGroupReference(); group != nil && group.GroupName == name {
+				item.Hide = false
+				found = true
+				break
+			}
+		}
+		if !found {
+			panic("group reference " + name + " not found, APL probably changed, fix tests!")
+		}
+	}
+
+	return combo
+}
+
 func init() {
 	RegisterDpsWarrior()
 	common.RegisterAllEffects()
@@ -62,6 +87,29 @@ func TestDpsWarrior(t *testing.T) {
 					proto.HandType_HandTypeTwoHand,
 				},
 			},
+		},
+		// Coverage for queue canceling and the Phase 3 tier set, neither of which any
+		// case above exercises: canceling is off in the shipped presets, and p3_fury_t6
+		// is a new gear set. Kept as its own config on purpose -- the settings matrix is
+		// a full cartesian product, so adding a gear set and a rotation to the config
+		// above would multiply all 480 existing cases instead of adding these 24.
+		{
+			Class:         proto.Class_ClassWarrior,
+			Race:          proto.Race_RaceOrc,
+			GearSet:       core.GetGearSet("../../../ui/warrior/dps/gear_sets", "p3_fury_t6"),
+			OtherGearSets: []core.GearSetCombo{core.GetGearSet("../../../ui/warrior/dps/gear_sets", "p3_fury")},
+			Talents:       DefaultFuryTalents,
+			Consumables:   DefaultConsumables,
+			SpecOptions:   core.SpecOptionsCombo{Label: "Fury", SpecOptions: DefaultOptions},
+
+			Rotation: furyRotationWithGroups("hs-cancel", "HS Queue Cancel"),
+			OtherRotations: []core.RotationCombo{
+				furyRotationWithGroups("hs-cancel-fallback", "HS Queue Cancel", "HS Queue Cancel: No Cleave Rage"),
+			},
+
+			StartingDistance: 25,
+			Profession1:      proto.Profession_Engineering,
+			Profession2:      proto.Profession_Blacksmithing,
 		},
 	}))
 }

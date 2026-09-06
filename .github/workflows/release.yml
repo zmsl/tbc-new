@@ -57,6 +57,13 @@ jobs:
               run: |
                   make clean && VERSION=${{ github.event.inputs.tag }} make release
 
+            # One bundle per platform, stamped with the tag: Claude Desktop compares that
+            # version against what is installed to decide whether an update exists.
+            - name: Pack MCP bundles 🔧
+              run: make mcp-bundle MCPB_VERSION=${TAG#v}
+              env:
+                  TAG: ${{ github.event.inputs.tag }}
+
             - name: Release
               uses: ncipollo/release-action@v1
               with:
@@ -73,3 +80,15 @@ jobs:
                       wowsimtbc-arm64-darwin.zip
                       wowsimtbc-amd64-linux.zip
                       wowsimtbc-windows.exe.zip
+                      mcp/dist/*.mcpb
+
+    # Installers for the Electron app, built by the same workflow that pull requests use.
+    desktop:
+        needs: [tests, build-and-release]
+        permissions:
+            contents: write
+        uses: ./.github/workflows/desktop_build.yml
+        with:
+            ref: ${{ github.event.inputs.ref }}
+            tag: ${{ github.event.inputs.tag }}
+            publish: true

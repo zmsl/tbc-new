@@ -4,6 +4,8 @@ import { ref } from 'tsx-vanilla';
 
 import i18n from '../../i18n/config';
 import { REPO_CHOOSE_NEW_ISSUE_URL, REPO_RELEASES_URL } from '../constants/other';
+import { DesktopBridge, DesktopUpdateInfo, getDesktop } from '../desktop';
+import { getFavoriteSim, onFavoriteChange, setFavoriteSim, simPathOf } from '../favorite_sim';
 import { SimUI } from '../sim_ui';
 import { isLocal, noop } from '../utils';
 import { Component } from './component';
@@ -41,6 +43,7 @@ export class SimHeader extends Component {
 
 		this.knownIssuesContent = (<ul className="text-start ps-3 mb-0"></ul>) as HTMLUListElement;
 		this.knownIssuesLink = this.addKnownIssuesLink();
+		this.addFavoriteLink();
 		this.addBugReportLink();
 		this.addDownloadBinaryLink();
 		this.addSimOptionsLink();
@@ -155,6 +158,34 @@ export class SimHeader extends Component {
 		this.knownIssuesLink._tippy?.setContent(this.knownIssuesContent);
 	}
 
+	// Also lives here, not only on the landing page: with a favourite set the landing page
+	// redirects away immediately, so a toggle that existed only there would be unreachable
+	// the moment it was used.
+	private addFavoriteLink() {
+		const path = simPathOf(window.location.href);
+		let link: TippyReferenceElement<HTMLElement>;
+
+		const render = () => {
+			const on = getFavoriteSim() === path;
+			link.classList.toggle('favorite-on', on);
+			const icon = link.querySelector('i');
+			if (icon) icon.className = `${on ? 'fas' : 'far'} fa-star fa-lg`;
+			link._tippy?.setContent(on ? 'This sim opens on startup. Click to stop.' : 'Open this sim on startup');
+		};
+
+		link = this.addToolbarLink({
+			parent: this.simToolbar,
+			icon: 'far fa-star fa-lg',
+			tooltip: 'Open this sim on startup',
+			classes: 'favorite-sim',
+			onclick: () => setFavoriteSim(getFavoriteSim() === path ? null : path),
+		}) as TippyReferenceElement<HTMLElement>;
+
+		// Also restyles when the star in the spec switcher is used.
+		onFavoriteChange(render);
+		render();
+	}
+
 	private addBugReportLink() {
 		this.addToolbarLink({
 			href: REPO_CHOOSE_NEW_ISSUE_URL,
@@ -168,6 +199,14 @@ export class SimHeader extends Component {
 		const href = REPO_RELEASES_URL;
 		const icon = 'fas fa-gauge-high fa-lg';
 		const parent = this.simToolbar;
+
+		const desktop = getDesktop();
+		if (desktop) {
+			// Already running the desktop app, so "download the sim for faster simulating"
+			// is meaningless here. The shell owns update checking instead.
+			this.addDesktopUpdateLink(desktop);
+			return;
+		}
 
 		if (isLocal()) {
 			fetch('/version')
@@ -198,6 +237,65 @@ export class SimHeader extends Component {
 				classes: 'downbin',
 			});
 		}
+	}
+
+	// Update control for the desktop shell. Hidden until the shell reports that a newer
+	// release exists, then walks available -> downloading -> ready, installing on the final
+	// click. Nothing here runs on the website; addDownloadBinaryLink gates on the bridge.
+	private addDesktopUpdateLink(desktop: DesktopBridge) {
+		let state: 'available' | 'downloading' | 'ready' = 'available';
+		let info: DesktopUpdateInfo | null = null;
+
+		const link = this.addToolbarLink({
+			parent: this.simToolbar,
+			icon: 'fas fa-circle-arrow-down fa-lg',
+			tooltip: 'Checking for updates...',
+			classes: 'downbin link-danger hide',
+			onclick: () => {
+				if (!info || state === 'downloading') return;
+				if (state === 'ready') {
+					desktop.installUpdate();
+					return;
+				}
+				state = 'downloading';
+				setTooltip('Downloading update...');
+				desktop
+					.startUpdate()
+					.then(result => {
+						// A build that cannot replace itself opens the release page instead,
+						// so there is nothing further for this button to do.
+						if (result?.openedExternally) {
+							state = 'available';
+							setTooltip(`Version ${info!.version} is available - download it from the releases page`);
+						}
+					})
+					.catch(err => {
+						state = 'available';
+						setTooltip(`Update failed: ${String(err)}`);
+					});
+			},
+		}) as TippyReferenceElement<HTMLElement>;
+
+		const setTooltip = (content: string) => link._tippy?.setContent(content);
+
+		desktop.onUpdateAvailable(update => {
+			info = update;
+			link.classList.remove('hide');
+			setTooltip(
+				update.canSelfUpdate
+					? `Version ${update.version} is available - click to update and restart`
+					: `Version ${update.version} is available - click to open the download page`,
+			);
+		});
+		desktop.onUpdateProgress(percent => setTooltip(`Downloading update... ${percent}%`));
+		desktop.onUpdateReady(() => {
+			state = 'ready';
+			setTooltip('Update ready - click to restart and install');
+		});
+		desktop.onUpdateError(message => {
+			state = 'available';
+			setTooltip(`Update failed: ${message}`);
+		});
 	}
 
 	private addSimOptionsLink() {

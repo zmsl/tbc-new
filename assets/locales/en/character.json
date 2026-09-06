@@ -29,7 +29,8 @@
 			"retribution": "Retribution"
 		},
 		"priest": {
-			"priest": ""
+			"dps": "Shadow",
+			"smite": "Smite"
 		},
 		"rogue": {
 			"rogue": ""

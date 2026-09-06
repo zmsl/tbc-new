@@ -1,3 +1,4 @@
+import { reportSimDone, reportSimProgress, setTitlebarDps } from '../desktop';
 import clsx from 'clsx';
 import tippy from 'tippy.js';
 
@@ -44,13 +45,23 @@ export function addSimAction(simUI: SimUI): SimResultsManager {
 				}
 			});
 
-			await simUI.runSim((progress: ProgressMetrics) => {
-				resultsManager.setSimProgress(progress);
-			});
-
-			resultsViewer.removeAbortButton();
-			if (!waitAbort) button.disabled = false;
-			isRunning = false;
+			let finalDps: number | null = null;
+			try {
+				await simUI.runSim((progress: ProgressMetrics) => {
+					resultsManager.setSimProgress(progress);
+					reportSimProgress(progress.completedIterations, progress.totalIterations);
+					if (progress.finalRaidResult && !progress.finalRaidResult.error) finalDps = progress.dps;
+					if (progress.dps) setTitlebarDps(`${progress.dps.toFixed(1)} DPS`);
+				});
+			} finally {
+				// In a finally so an aborted or failed run cleans up too: otherwise the
+				// taskbar progress bar and the sleep blocker outlive the sim that started
+				// them. A run that did not finish gets no notification.
+				reportSimDone(finalDps === null ? undefined : { body: `${(finalDps as number).toFixed(2)} DPS` });
+				resultsViewer.removeAbortButton();
+				if (!waitAbort) button.disabled = false;
+				isRunning = false;
+			}
 		}
 	});
 

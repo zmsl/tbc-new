@@ -57,6 +57,7 @@ message Player {
 		RetributionPaladin retribution_paladin = 23;
 
 		Priest priest = 24;
+		SmitePriest smite_priest = 59;
 
 		Rogue rogue = 29;
 

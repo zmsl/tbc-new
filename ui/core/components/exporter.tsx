@@ -2,6 +2,7 @@ import { ref } from 'tsx-vanilla';
 
 import { SimUI } from '../sim_ui';
 import { TypedEvent } from '../typed_event';
+import { saveFileNatively } from '../desktop';
 import { downloadString, kebabCase } from '../utils';
 import { BaseModal } from './base_modal';
 import { CopyButton } from './copy_button';
@@ -44,7 +45,9 @@ export abstract class Exporter extends BaseModal {
 			const downloadButton = downloadBtnRef.value!;
 			downloadButton.addEventListener('click', _event => {
 				const data = this.textElem.textContent!;
-				downloadString(data, 'wowsims.json');
+				// A native Save As in the desktop app; the browser download path otherwise,
+				// which would silently drop the file into Downloads.
+				if (!saveFileNatively('wowsims.json', data)) downloadString(data, 'wowsims.json');
 			});
 		}
 	}

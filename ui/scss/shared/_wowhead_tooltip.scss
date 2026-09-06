@@ -1,0 +1,78 @@
+// A folder-style tab hanging off the bottom of every Wowhead tooltip, telling you the item
+// can be opened on Wowhead. The element is built in ui/core/wowhead_links.ts, which also
+// handles the ctrl+click itself.
+//
+// Wowhead paints its tooltip with a sprite image, so there was no CSS value to match
+// against. The transparency below was measured instead, by screenshotting one tooltip pixel
+// over a black and over a white backdrop: the difference came to exactly 0.2 of full range
+// on every channel, so the tooltip paints at 80% opacity. The tab is plain black at that
+// same opacity and borderless, so it stays quiet.
+
+.wowsims-wowhead-tab {
+	// A percentage of the tooltip, so the joining curves can be positioned against the same
+	// basis, and so this tracks Wowhead's own tooltip widths, which vary by content.
+	--wowhead-tab-width: 90%;
+	--wowhead-tab-fillet: 10px;
+	--wowhead-tab-bg: rgb(0 0 0 / 80%);
+
+	position: absolute;
+	top: 100%;
+	left: 50%;
+	width: var(--wowhead-tab-width);
+	margin-top: -1px;
+	margin-left: calc(var(--wowhead-tab-width) * -0.5);
+	padding: 0.3rem 0.6rem 0.35rem;
+	border-radius: 0 0 8px 8px;
+	background: var(--wowhead-tab-bg);
+	color: rgb(255 255 255 / 42%);
+	font-size: 0.8125rem;
+	line-height: 1.2;
+	text-align: center;
+	white-space: nowrap;
+	// Never intercept the hover that is keeping the tooltip open.
+	pointer-events: none;
+
+	// The tooltip casting down onto the tab. A box-shadow on the tooltip itself cannot do
+	// this: a parent's shadow paints behind its own pseudo-element, so the tab would sit on
+	// top of it. Shading the tab's own top edge instead produces the same read.
+	box-shadow: inset 0 5px 6px -4px rgb(0 0 0 / 85%);
+
+	// The modifier, lifted out of the surrounding sentence so it reads as a key rather than
+	// prose. Brightness only -- a hue here would fight the tooltip.
+	&__key {
+		color: rgb(255 255 255 / 88%);
+		font-weight: 600;
+	}
+
+	// The two concave curves flaring the tab out into the tooltip's bottom edge, the way a
+	// folder tab meets the folder. Each is a square of tab-coloured material with a quarter
+	// disc cut out of the corner nearest the tab. The half-pixel before the solid stop
+	// antialiases the arc, which is otherwise visibly stepped.
+	&::before,
+	&::after {
+		content: '';
+		position: absolute;
+		top: 0;
+		width: var(--wowhead-tab-fillet);
+		height: var(--wowhead-tab-fillet);
+		pointer-events: none;
+	}
+
+	&::before {
+		right: 100%;
+		background: radial-gradient(
+			circle at 0 100%,
+			transparent calc(var(--wowhead-tab-fillet) - 0.5px),
+			var(--wowhead-tab-bg) var(--wowhead-tab-fillet)
+		);
+	}
+
+	&::after {
+		left: 100%;
+		background: radial-gradient(
+			circle at 100% 100%,
+			transparent calc(var(--wowhead-tab-fillet) - 0.5px),
+			var(--wowhead-tab-bg) var(--wowhead-tab-fillet)
+		);
+	}
+}

@@ -5,7 +5,10 @@ ASSETS := $(patsubst assets/%,$(OUT_DIR)/assets/%,$(ASSETS_INPUT))
 # Recursive wildcard function. Needs to be '=' instead of ':=' because of recursion.
 rwildcard = $(foreach d,$(wildcard $(1:=/*)),$(call rwildcard,$d,$2) $(filter $(subst *,%,$2),$d))
 GOROOT := $(shell go env GOROOT)
-UI_SRC := $(shell find ui -name '*.ts' -o -name '*.tsx' -o -name '*.scss' -o -name '*.html')
+# .json matters: gear sets, APL rotations, preset builds and the talent trees are all JSON
+# imported straight into the bundle. Without it, editing a preset leaves the bundle stale and
+# make reports nothing to do, so host/desktop builds silently ship the previous gear.
+UI_SRC := $(shell find ui -name '*.ts' -o -name '*.tsx' -o -name '*.scss' -o -name '*.html' -o -name '*.json')
 
 $(OUT_DIR)/.dirstamp: \
   $(OUT_DIR)/lib.wasm \
@@ -25,6 +28,11 @@ $(OUT_DIR)/bundle/.dirstamp: \
   ui/core/proto/api.ts
 	node_modules/typescript/bin/tsc --noEmit
 	npx tsx vite.build-workers.mts
+# Vite hashes chunk filenames and never removes the previous build's, so the directory
+# accumulates orphans that nothing references and every packaging target then embeds. Clearing
+# it first took the sidecar binary from 88MB to 33MB. Only bundle/ is emptied: the rest of
+# $(OUT_DIR) holds assets and lib.wasm that make builds through separate rules.
+	rm -rf $(OUT_DIR)/bundle
 	npx vite build
 	touch $@
 
@@ -47,8 +55,19 @@ clean:
 	  binary_dist \
 	  ui/core/index.ts \
 	  ui/core/proto/*.ts \
-	  node_modules
+	  node_modules \
+	  desktop-dist \
+	  desktop/build \
+	  desktop/node_modules \
+	  mcp/dist \
+	  wowsimmcp \
+	  wowsimmcp.exe \
+	  wowsims-tbc.mcpb
 	find . -name "*.results.tmp" -type f -delete
+# The presets are copied out of ui/ by mcp-presets, so they are build output like the rest.
+# The glob leaves .gitkeep alone -- it does not match dotfiles -- which matters because that
+# one file is tracked, and a clean that deleted it would leave the working tree dirty.
+	rm -rf $(MCP_PRESETS)/*
 
 ui/core/proto/api.ts: proto/*.proto node_modules
 	npx protoc --ts_opt generate_dependencies --ts_out ui/core/proto --proto_path proto proto/api.proto
@@ -183,6 +202,145 @@ release: wowsimtbc wowsimtbc-windows.exe
 	zip wowsimcli-amd64-linux.zip wowsimcli-amd64-linux
 	zip wowsimcli-arm64-darwin.zip wowsimcli-arm64-darwin
 	zip wowsimcli-windows.exe.zip wowsimcli-windows.exe
+
+
+# ---- Desktop app (Electron shell) -------------------------------------------------------
+# Deliberately off the default build path: `make`, `make test` and `make host` never touch
+# any of this, and Electron stays out of the root package.json so `npm ci` -- and the four
+# CI test shards that run it -- are unaffected.
+
+DESKTOP_DIR     := desktop
+DESKTOP_SIDECAR := $(DESKTOP_DIR)/build/sidecar
+DESKTOP_ICON    := $(DESKTOP_DIR)/build/icon.png
+DESKTOP_LDFLAGS := -X 'main.Version=$(VERSION)' -s -w
+
+# Single source of truth for the app icon; electron-builder derives .ico and .icns from it.
+$(DESKTOP_ICON): assets/favicon_io/android-chrome-512x512.png
+	mkdir -p $(@D)
+	cp $< $@
+
+$(DESKTOP_DIR)/node_modules: $(DESKTOP_DIR)/package.json
+	cd $(DESKTOP_DIR) && npm install
+	touch $@
+
+# electron-updater compares releases against the version in desktop/package.json while the
+# sim server reports its -ldflags value. If the two drift, the app either offers an update
+# it already has or never notices one.
+.PHONY: desktop-version
+desktop-version:
+ifneq ($(VERSION),)
+	cd $(DESKTOP_DIR) && npm version --no-git-tag-version --allow-same-version $(patsubst v%,%,$(VERSION))
+endif
+
+# Desktop-only: swap the cdnjs Font Awesome link for a bundled copy, in the embedded client
+# tree. The web sources keep the CDN link untouched, so the site is unaffected.
+.PHONY: desktop-bundle-fonts
+desktop-bundle-fonts: $(DESKTOP_DIR)/node_modules
+	node tools/desktop/bundle_fonts.mjs binary_dist/tbc
+
+.PHONY: desktop-sidecar-win
+desktop-sidecar-win: binary_dist binary_dist/dist.go desktop-bundle-fonts
+	mkdir -p $(DESKTOP_SIDECAR)
+	GOOS=windows GOARCH=amd64 GOAMD64=v2 go build -o $(DESKTOP_SIDECAR)/wowsimtbc-x64.exe -ldflags="$(DESKTOP_LDFLAGS)" ./sim/web/main.go
+
+.PHONY: desktop-sidecar-mac
+desktop-sidecar-mac: binary_dist binary_dist/dist.go desktop-bundle-fonts
+	mkdir -p $(DESKTOP_SIDECAR)
+	GOOS=darwin GOARCH=amd64 GOAMD64=v2 go build -o $(DESKTOP_SIDECAR)/wowsimtbc-x64   -ldflags="$(DESKTOP_LDFLAGS)" ./sim/web/main.go
+	GOOS=darwin GOARCH=arm64                go build -o $(DESKTOP_SIDECAR)/wowsimtbc-arm64 -ldflags="$(DESKTOP_LDFLAGS)" ./sim/web/main.go
+
+.PHONY: desktop-win
+desktop-win: $(DESKTOP_DIR)/node_modules $(DESKTOP_ICON) desktop-version desktop-sidecar-win
+	cd $(DESKTOP_DIR) && npx electron-builder --win nsis --publish never
+
+.PHONY: desktop-mac
+desktop-mac: $(DESKTOP_DIR)/node_modules $(DESKTOP_ICON) desktop-version desktop-sidecar-mac
+	cd $(DESKTOP_DIR) && npx electron-builder --mac dmg zip --publish never
+
+# Unpacked Windows app, for eyeballing the real window without building an installer.
+# Unlike desktop-win this needs no wine, because it stops before NSIS assembly. Copy
+# desktop-dist/win-unpacked somewhere under /mnt/c and run "WoWSims TBC.exe" from Windows.
+.PHONY: desktop-preview-win
+desktop-preview-win: $(DESKTOP_DIR)/node_modules $(DESKTOP_ICON) desktop-sidecar-win
+	cd $(DESKTOP_DIR) && npx electron-builder --win --dir --publish never
+
+# Runs the shell against the repo-root wowsimtbc build, for iterating on the shell itself.
+.PHONY: desktop-dev
+desktop-dev: $(DESKTOP_DIR)/node_modules wowsimtbc
+	cd $(DESKTOP_DIR) && npm start
+
+# ---- MCP server -------------------------------------------------------------------------
+# Like the desktop shell, deliberately off the default build path. It is its own Go module, so
+# the MCP SDK never enters the root go.mod and `go build ./...`, `make test` and the four CI
+# shards (which list ./sim/...) never see any of it. The trade is that a breaking change in
+# sim/core only shows up here, so run `make mcp-test` when changing the engine's API.
+
+MCP_DIR     := mcp
+MCP_LDFLAGS := -X 'main.Version=$(VERSION)' -s -w
+
+MCP_PRESETS := $(MCP_DIR)/internal/presets/files
+
+# Everything these targets produce goes here rather than the repository root, so a built tree
+# stays tidy and `rm -rf mcp/dist` is the whole cleanup. The root binaries the other targets
+# write (wowsimtbc and friends) are upstream's convention and the release workflow's contract,
+# so they are left where they are.
+MCP_OUT := $(MCP_DIR)/dist
+
+# The gear sets, rotations, builds and talent presets are compiled into the binary so it needs
+# nothing but itself at runtime. They are copied out of ui/ on every build rather than committed
+# under mcp/: one copy in the repository, and no chance of the two drifting.
+.PHONY: mcp-presets
+mcp-presets:
+	rm -rf $(MCP_PRESETS)
+	mkdir -p $(MCP_PRESETS)
+	touch $(MCP_PRESETS)/.gitkeep
+	cd ui && find . -path './*/*/*' \( -name '*.gear.json' -o -name '*.apl.json' -o -name '*.build.json' \) -print \
+	  -o -path './*/*/presets.ts' -print \
+	  | while read -r f; do \
+	      mkdir -p "../$(MCP_PRESETS)/$$(dirname "$$f")"; \
+	      cp "$$f" "../$(MCP_PRESETS)/$$f"; \
+	    done
+
+# with_db is not optional in practice: without it every item lookup comes back empty.
+.PHONY: mcp
+mcp: sim/core/proto/api.pb.go mcp-presets
+	mkdir -p $(MCP_OUT)
+	cd $(MCP_DIR) && go build --tags=with_db -o dist/wowsimmcp -ldflags="$(MCP_LDFLAGS)" .
+	@echo "built $(MCP_OUT)/wowsimmcp"
+
+# Claude Desktop runs on Windows and macOS, and cannot execute a Linux binary sitting in WSL
+# without going through wsl.exe. Building the .exe removes that hop.
+.PHONY: mcp-windows
+mcp-windows: sim/core/proto/api.pb.go mcp-presets
+	mkdir -p $(MCP_OUT)
+	cd $(MCP_DIR) && GOOS=windows GOARCH=amd64 GOAMD64=v2 go build --tags=with_db -o dist/wowsimmcp.exe -ldflags="$(MCP_LDFLAGS)" .
+	@echo "built $(MCP_OUT)/wowsimmcp.exe"
+
+.PHONY: mcp-test
+mcp-test: sim/core/proto/api.pb.go mcp-presets
+	cd $(MCP_DIR) && GOARCH=amd64 go test --tags=with_db ./...
+
+# Packs the Claude Desktop bundles: a zip carrying the server and a manifest describing it,
+# which installs by being opened. One per platform, because a manifest names a single entry
+# point and Claude Desktop reads compatibility.platforms to decide whether it can install at all.
+#
+# Set MCPB_VERSION to stamp a version on the manifests. Claude Desktop compares that field
+# against what is installed to decide whether an update exists, so a release passes its tag and
+# a local build leaves it at the constant in mcp/internal/bundle.
+MCPB_VERSION ?=
+
+.PHONY: mcp-bundle
+mcp-bundle: sim/core/proto/api.pb.go mcp-presets
+	rm -rf $(MCP_OUT)/mcpb-* $(MCP_OUT)/*.mcpb
+	tools/mcp/pack_bundle.sh windows      windows amd64 $(MCP_OUT) $(MCPB_VERSION)
+	tools/mcp/pack_bundle.sh arm64-darwin darwin  arm64 $(MCP_OUT) $(MCPB_VERSION)
+	tools/mcp/pack_bundle.sh amd64-darwin darwin  amd64 $(MCP_OUT) $(MCPB_VERSION)
+	@echo "open one with Claude Desktop to install it"
+
+# Regenerates mcp/docs/TOOLS.md from the registry. Never edit that file by hand.
+.PHONY: mcp-docs
+mcp-docs: sim/core/proto/api.pb.go
+	cd $(MCP_DIR) && go run --tags=with_db ./cmd/gendocs
 
 sim/core/proto/api.pb.go: proto/*.proto
 	@if go version -m "$$(command -v protoc-gen-go)" 2>/dev/null | grep -qE '^[[:space:]]+mod[[:space:]]+github\.com/golang/protobuf[[:space:]]'; then \

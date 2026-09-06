@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
@@ -38,6 +39,34 @@ var (
 	outdated int
 )
 
+// desktopOrigin is the custom scheme the desktop shell serves the UI from. Requests reach
+// us proxied over loopback, so in desktop mode this is the only origin allowed to call the
+// sim API instead of the "*" the browser build needs.
+const desktopOrigin = "wowsims://app"
+
+// readyLinePrefix is printed on stdout once the listener is bound. The desktop shell
+// blocks on this line rather than polling a port, so it cannot race our startup.
+const readyLinePrefix = "WOWSIMS_LISTENING port="
+
+// defaultHost is the browser-mode listen address. Desktop mode replaces it with a
+// loopback address on an OS-assigned port unless --host was passed explicitly.
+const defaultHost = "localhost:3333"
+
+// corsOrigin is the Access-Control-Allow-Origin value. Set once during startup, before any
+// handler is registered, and read-only afterwards.
+var corsOrigin = "*"
+
+// serverConfig is the resolved startup configuration. It exists so runServer does not take
+// six positional booleans.
+type serverConfig struct {
+	useFS   bool
+	host    string
+	launch  bool
+	simName string
+	wasm    bool
+	desktop bool
+}
+
 func main() {
 	if Version == "" {
 		Version = "development"
@@ -45,14 +74,15 @@ func main() {
 	var useFS = flag.Bool("usefs", false, "Use local file system for client files. Set to true during development.")
 	var wasm = flag.Bool("wasm", false, "Use wasm for sim instead of web server apis. Can only be used with usefs=true")
 	var simName = flag.String("sim", "", "Name of simulator to launch (ex: balance_druid, elemental_shaman, etc)")
-	var host = flag.String("host", "localhost:3333", "URL to host the interface on.")
+	var host = flag.String("host", defaultHost, "URL to host the interface on.")
 	var launch = flag.Bool("launch", true, "auto launch browser")
 	var skipVersionCheck = flag.Bool("nvc", false, "set true to skip version check")
+	var desktop = flag.Bool("desktop", false, "Run as the backend for the desktop shell: loopback only, no browser launch, no REPL, and exit when stdin closes.")
 
 	flag.Parse()
 
 	fmt.Printf("Version: %s\n", Version)
-	if !*skipVersionCheck && Version != "development" {
+	if !*skipVersionCheck && !*desktop && Version != "development" {
 		go func() {
 			resp, err := http.Get("https://api.github.com/repos/wowsims/tbc-new/releases/latest")
 			if err != nil {
@@ -86,7 +116,20 @@ func main() {
 		progMut:         sync.RWMutex{},
 		asyncProgresses: map[string]*asyncProgress{},
 	}
-	s.runServer(*useFS, *host, *launch, *simName, *wasm, bufio.NewReader(os.Stdin))
+	cfg := serverConfig{useFS: *useFS, host: *host, launch: *launch, simName: *simName, wasm: *wasm, desktop: *desktop}
+	if cfg.desktop {
+		// The shell owns the window, so never steal focus with a browser tab.
+		cfg.launch = false
+		corsOrigin = desktopOrigin
+		if cfg.host == defaultHost {
+			// Let the OS pick a free port. A second instance, or anything else already
+			// sitting on 3333, must not stop the app from starting. Loopback only: this
+			// server has no authentication.
+			cfg.host = "127.0.0.1:0"
+		}
+	}
+
+	s.runServer(cfg, bufio.NewReader(os.Stdin))
 }
 
 // Handlers to decode and handle each proto function
@@ -269,7 +312,7 @@ func (s *server) setupAsyncServer() {
 }
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Origin", corsOrigin)
 		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
 		w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
 		if r.Method == "OPTIONS" {
@@ -279,11 +322,11 @@ func corsMiddleware(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
-func (s *server) runServer(useFS bool, host string, launchBrowser bool, simName string, wasm bool, inputReader *bufio.Reader) {
+func (s *server) runServer(cfg serverConfig, inputReader *bufio.Reader) {
 	s.setupAsyncServer()
 
 	var fs http.Handler
-	if useFS {
+	if cfg.useFS {
 		log.Printf("Using local file system for development.")
 		fs = http.FileServer(http.Dir("./dist"))
 	} else {
@@ -311,7 +354,7 @@ func (s *server) runServer(useFS bool, host string, launchBrowser bool, simName 
 		if strings.HasSuffix(req.URL.Path, ".js") {
 			resp.Header().Set("Content-Type", "application/javascript")
 		}
-		if !useFS || (useFS && !wasm) {
+		if !cfg.useFS || (cfg.useFS && !cfg.wasm) {
 			if strings.HasSuffix(req.URL.Path, "sim_worker.js") {
 				req.URL.Path = strings.Replace(req.URL.Path, "sim_worker.js", "net_worker.js", 1)
 			}
@@ -319,11 +362,20 @@ func (s *server) runServer(useFS bool, host string, launchBrowser bool, simName 
 		fs.ServeHTTP(resp, req)
 	})
 
-	if launchBrowser {
-		if strings.HasPrefix(host, ":") {
-			host = "localhost" + host
-		}
-		url := fmt.Sprintf("http://%s/tbc/%s", host, simName)
+	// Bind before announcing or launching anything. With port 0 the OS assigns the port,
+	// so the listener is the only source of truth for where we ended up.
+	listener, err := net.Listen("tcp", cfg.host)
+	if err != nil {
+		log.Fatalf("Failed to listen on %s: %s", cfg.host, err)
+	}
+	port := listener.Addr().(*net.TCPAddr).Port
+
+	// The desktop shell blocks reading our stdout until this line appears, then connects to
+	// the port it names. Printing it after a successful bind is what makes that race-free.
+	fmt.Printf("%s%d\n", readyLinePrefix, port)
+
+	if cfg.launch {
+		url := fmt.Sprintf("http://localhost:%d/tbc/%s", port, cfg.simName)
 		log.Printf("Launching interface on %s", url)
 		go func() {
 			err := browser.OpenURL(url)
@@ -336,7 +388,7 @@ func (s *server) runServer(useFS bool, host string, launchBrowser bool, simName 
 
 	go func() {
 		// Launch server!
-		if err := http.ListenAndServe(host, nil); err != nil {
+		if err := http.Serve(listener, nil); err != nil {
 			log.Printf("Failed to shutdown server: %s", err)
 			os.Exit(1)
 		}
@@ -346,13 +398,28 @@ func (s *server) runServer(useFS bool, host string, launchBrowser bool, simName 
 
 	// used to read a CTRL+C
 	c := make(chan os.Signal, 10)
-	signal.Notify(c, syscall.SIGINT)
+	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
 
 	go func() {
 		<-c
 		log.Printf("Shutting down")
 		os.Exit(0)
 	}()
+
+	if cfg.desktop {
+		// The shell holds the write end of our stdin. If it exits — cleanly, by crash, or
+		// by being force-killed — the pipe closes and we stop with it, so a dead shell can
+		// never leave an orphaned sim server holding a port and CPU.
+		go func() {
+			io.Copy(io.Discard, os.Stdin)
+			log.Printf("Desktop shell disconnected, shutting down")
+			os.Exit(0)
+		}()
+		// No REPL in desktop mode: there is no terminal attached to read it. Shutdown is
+		// owned by the signal handler and the stdin watcher above.
+		select {}
+	}
+
 	fmt.Printf("Enter Command... '?' for list\n")
 	for {
 		fmt.Printf("> ")

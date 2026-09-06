@@ -1,6 +1,8 @@
 /// <reference types="vite/client" />
 import './shared/bootstrap_overrides';
 
+import { installFavoriteStars, redirectToFavoriteSim } from './core/favorite_sim';
+
 import * as Popper from '@popperjs/core';
 import { Dropdown, Modal, Tab } from 'bootstrap';
 import { Chart, registerables } from 'chart.js';
@@ -39,6 +41,11 @@ function docReady(fn: any) {
 	}
 }
 
+// Before anything renders: with a favourite set this page is only a redirect. Only ever runs
+// here, on the landing page, so a direct link to a sim is never intercepted.
+redirectToFavoriteSim();
+
 docReady(function () {
+	installFavoriteStars(document);
 	document.body.classList.add('ready');
 });

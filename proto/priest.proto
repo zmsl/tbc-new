@@ -99,3 +99,15 @@ message Priest {
 	}
 	Options options = 3;
 }
+
+// The "meme spec": a Discipline/Holy build that deals Holy damage with Holy Fire and Smite
+// instead of healing. Shares every class option with the shadow spec.
+message SmitePriest {
+	message Rotation {}
+
+	message Options {
+		PriestOptions class_options = 1;
+		UnitReference power_infusion_target = 2;
+	}
+	Options options = 3;
+}
