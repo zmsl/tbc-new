@@ -24,6 +24,14 @@ type addonExport struct {
 		Name string `json:"name"`
 	} `json:"professions"`
 	Gear addonGear `json:"gear"`
+
+	// Named the way the game names it -- "fury", "beast mastery" -- rather than the way the
+	// simulator does. Newer addon versions carry it, and it saves asking which spec to simulate.
+	Spec string `json:"spec"`
+
+	// Newer addon versions put the bags and bank in the same export as the character, so a
+	// separate paste is no longer needed.
+	BagItems addonGear `json:"bagItems"`
 }
 
 type addonGear struct {
@@ -40,7 +48,7 @@ type addonItem struct {
 type importAddonInput struct {
 	Export string `json:"export" jsonschema:"the JSON the WowSimsExporter addon puts on your clipboard"`
 	Spec   string `json:"spec,omitempty" jsonschema:"which spec to simulate as. Only needed when the class has more than one, e.g. a priest can be Priest (shadow) or SmitePriest."`
-	Bags   string `json:"bags,omitempty" jsonschema:"an optional second export listing items in your bags, as an EquipmentSpec JSON. Returned as a candidate pool to compare against what you are wearing."`
+	Bags   string `json:"bags,omitempty" jsonschema:"a separate bags export, as an EquipmentSpec JSON. Only needed for older addon versions: a current export carries the bags and bank inline and they are read automatically."`
 }
 
 type importAddonOutput struct {
@@ -80,16 +88,38 @@ func importAddon(config engine.Config) spec.Entry {
 				return nil, output, err
 			}
 
-			resolved, err := resolveSpec(input.Spec, class)
+			resolved, specNote, err := resolveSpec(input.Spec, class, export.Spec)
 			if err != nil {
 				return nil, output, err
 			}
 
-			settings, notes, err := config.BuildSettings(engine.SettingsRequest{Spec: resolved})
+			// The export carries gear and talents, so those are not defaulted -- but the rotation is
+			// not in an export, and several specs ship one per talent tree. A fury warrior handed the
+			// arms rotation would sim badly and silently, so the export's spec picks the rotation too
+			// when a preset is named after it.
+			rotation := rotationForSpec(config, resolved, export.Spec)
+
+			settings, notes, err := config.BuildSettings(engine.SettingsRequest{
+				Spec:     resolved,
+				Talents:  export.Talents,
+				Rotation: rotation,
+			})
 			if err != nil {
 				return nil, output, err
 			}
-			output.Notes = notes
+			// The gear set is replaced wholesale below, so saying which one was defaulted would be
+			// describing something that is not in the result.
+			for _, note := range notes {
+				if !strings.HasPrefix(note, "gear set defaulted") {
+					output.Notes = append(output.Notes, note)
+				}
+			}
+			if specNote != "" {
+				output.Notes = append(output.Notes, specNote)
+			}
+			if rotation != "" {
+				output.Notes = append(output.Notes, fmt.Sprintf("using the %q rotation", rotation))
+			}
 
 			race, err := parseEnum[proto.Race](export.Race, "Race", proto.Race_value)
 			if err != nil {
@@ -127,10 +157,15 @@ func importAddon(config engine.Config) spec.Entry {
 				output.Notes = append(output.Notes, fmt.Sprintf("the character is level %d; the simulator only models level 70", export.Level))
 			}
 
-			if input.Bags != "" {
+			// A separate bags export still works, but a current one carries them inline.
+			switch {
+			case input.Bags != "":
 				if output.Pool, err = poolFromBags(input.Bags); err != nil {
 					return nil, output, err
 				}
+			case len(export.BagItems.Items) > 0:
+				output.Pool = poolFromItems(export.BagItems)
+				output.Notes = append(output.Notes, describePool(len(output.Pool), countItems(export.BagItems)))
 			}
 
 			output.Summary = summarize(settings)
@@ -155,18 +190,25 @@ func parseEnum[T ~int32](name, prefix string, values map[string]int32) (T, error
 	return T(0), fmt.Errorf("unrecognised %s %q", strings.ToLower(prefix), name)
 }
 
-// A class may have several specs and the export does not say which is being played, so the
-// caller has to choose unless there is only one.
-func resolveSpec(requested string, class proto.Class) (proto.Spec, error) {
+// Which spec to simulate comes from the caller, then from the export, then from the class having
+// only one. The returned note says which of those it was, since a talent tree and a simulated
+// spec are not the same thing and the choice should not be silent.
+func resolveSpec(requested string, class proto.Class, exported string) (proto.Spec, string, error) {
 	if requested != "" {
 		resolved, err := engine.ParseSpec(requested)
 		if err != nil {
-			return proto.Spec_SpecUnknown, err
+			return proto.Spec_SpecUnknown, "", err
 		}
 		if engine.SpecClass(resolved) != class {
-			return proto.Spec_SpecUnknown, fmt.Errorf("%s is not a %s spec", requested, trimEnum(class.String(), "Class"))
+			return proto.Spec_SpecUnknown, "", fmt.Errorf("%s is not a %s spec", requested, trimEnum(class.String(), "Class"))
 		}
-		return resolved, nil
+		return resolved, "", nil
+	}
+
+	if exported != "" {
+		if resolved, ok := wseSpecs[class][normalizeSpecName(exported)]; ok {
+			return resolved, fmt.Sprintf("the export says %q, simulated as %s", exported, trimEnum(resolved.String(), "Spec")), nil
+		}
 	}
 
 	var candidates []proto.Spec
@@ -178,16 +220,91 @@ func resolveSpec(requested string, class proto.Class) (proto.Spec, error) {
 
 	switch len(candidates) {
 	case 0:
-		return proto.Spec_SpecUnknown, fmt.Errorf("no simulated spec for %s", trimEnum(class.String(), "Class"))
+		return proto.Spec_SpecUnknown, "", fmt.Errorf("no simulated spec for %s", trimEnum(class.String(), "Class"))
 	case 1:
-		return candidates[0], nil
+		return candidates[0], "", nil
 	}
 
 	names := make([]string, 0, len(candidates))
 	for _, candidate := range candidates {
 		names = append(names, trimEnum(candidate.String(), "Spec"))
 	}
-	return proto.Spec_SpecUnknown, fmt.Errorf("%s has several simulated specs; pass one of %s", trimEnum(class.String(), "Class"), strings.Join(names, ", "))
+	if exported != "" {
+		return proto.Spec_SpecUnknown, "", fmt.Errorf("%s %q could be simulated as any of %s; pass one as spec",
+			trimEnum(class.String(), "Class"), exported, strings.Join(names, ", "))
+	}
+	return proto.Spec_SpecUnknown, "", fmt.Errorf("%s has several simulated specs; pass one of %s", trimEnum(class.String(), "Class"), strings.Join(names, ", "))
+}
+
+// The export names the talent tree the game's way. Several trees map onto one simulated spec -- a
+// mage is a mage whichever tree it took -- and a feral druid maps onto two, cat and bear, so that
+// one is deliberately absent and still has to be asked.
+var wseSpecs = map[proto.Class]map[string]proto.Spec{
+	proto.Class_ClassWarrior: {
+		"arms": proto.Spec_SpecDpsWarrior, "fury": proto.Spec_SpecDpsWarrior,
+		"protection": proto.Spec_SpecProtectionWarrior,
+	},
+	proto.Class_ClassPaladin: {
+		"holy": proto.Spec_SpecHolyPaladin, "protection": proto.Spec_SpecProtectionPaladin,
+		"retribution": proto.Spec_SpecRetributionPaladin,
+	},
+	proto.Class_ClassShaman: {
+		"elemental": proto.Spec_SpecElementalShaman, "enhancement": proto.Spec_SpecEnhancementShaman,
+		"restoration": proto.Spec_SpecRestorationShaman,
+	},
+	proto.Class_ClassDruid: {
+		"balance": proto.Spec_SpecBalanceDruid, "restoration": proto.Spec_SpecRestorationDruid,
+	},
+	proto.Class_ClassPriest: {
+		"shadow": proto.Spec_SpecPriest,
+		// The only non-shadow priest this simulator models is the smite build.
+		"discipline": proto.Spec_SpecSmitePriest, "holy": proto.Spec_SpecSmitePriest,
+	},
+	proto.Class_ClassHunter: {
+		"beastmastery": proto.Spec_SpecHunter, "marksmanship": proto.Spec_SpecHunter,
+		"survival": proto.Spec_SpecHunter,
+	},
+	proto.Class_ClassRogue: {
+		"assassination": proto.Spec_SpecRogue, "combat": proto.Spec_SpecRogue, "subtlety": proto.Spec_SpecRogue,
+	},
+	proto.Class_ClassMage: {
+		"arcane": proto.Spec_SpecMage, "fire": proto.Spec_SpecMage, "frost": proto.Spec_SpecMage,
+	},
+	proto.Class_ClassWarlock: {
+		"affliction": proto.Spec_SpecWarlock, "demonology": proto.Spec_SpecWarlock,
+		"destruction": proto.Spec_SpecWarlock,
+	},
+}
+
+func describePool(pool, carried int) string {
+	note := fmt.Sprintf("read %d equippable items from the export's bags and bank", pool)
+	if skipped := carried - pool; skipped > 0 {
+		note += fmt.Sprintf("; %d others are not gear the simulator models and were skipped", skipped)
+	}
+	return note
+}
+
+// A rotation preset named after the talent tree the character actually plays, if there is one.
+func rotationForSpec(config engine.Config, spec proto.Spec, exported string) string {
+	if exported == "" {
+		return ""
+	}
+	presets, err := config.ListPresets(spec)
+	if err != nil {
+		return ""
+	}
+
+	wanted := normalizeSpecName(exported)
+	for _, name := range presets.Rotations {
+		if normalizeSpecName(name) == wanted {
+			return name
+		}
+	}
+	return ""
+}
+
+func normalizeSpecName(name string) string {
+	return strings.ToLower(strings.NewReplacer(" ", "", "-", "", "_", "").Replace(strings.TrimSpace(name)))
 }
 
 // Equipment is positional: index is the slot. An empty slot stays as an empty entry rather than
@@ -237,24 +354,52 @@ func poolFromBags(raw string) ([]poolItem, error) {
 	if err := json.Unmarshal([]byte(raw), &gear); err != nil {
 		return nil, fmt.Errorf("this does not look like a bags export: %w", err)
 	}
+	return poolFromItems(gear), nil
+}
 
+func poolFromItems(gear addonGear) []poolItem {
 	var pool []poolItem
 	for _, item := range gear.Items {
 		if item == nil || item.ID == 0 {
 			continue
 		}
-		entry := poolItem{ItemID: item.ID, Enchant: item.Enchant, Gems: item.Gems}
-		if known, ok := engine.Item(item.ID); ok {
-			entry.Name = known.Name
-			entry.Phase = known.Phase
-			for _, slot := range core.EligibleItemSlots(known) {
-				entry.Slots = append(entry.Slots, trimEnum(slot.String(), "ItemSlot"))
-			}
-			for _, socket := range known.GemSockets {
-				entry.Sockets = append(entry.Sockets, trimEnum(socket.String(), "GemColor"))
-			}
+
+		// Bags hold plenty the simulator has no record of -- crafting tools, quest items,
+		// consumables -- and none of it is a gear candidate. They are counted rather than listed,
+		// by the caller, so nothing disappears without being mentioned.
+		known, ok := engine.Item(item.ID)
+		if !ok {
+			continue
+		}
+		entry := poolItem{
+			ItemID:  item.ID,
+			Name:    known.Name,
+			Phase:   known.Phase,
+			Enchant: item.Enchant,
+			Gems:    item.Gems,
+		}
+		for _, slot := range core.EligibleItemSlots(known) {
+			entry.Slots = append(entry.Slots, trimEnum(slot.String(), "ItemSlot"))
+		}
+		for _, socket := range known.GemSockets {
+			entry.Sockets = append(entry.Sockets, trimEnum(socket.String(), "GemColor"))
+		}
+		if len(entry.Slots) == 0 {
+			continue
 		}
 		pool = append(pool, entry)
 	}
-	return pool, nil
+	return pool
+}
+
+// countItems is how many entries a bag export actually carried, so the difference between it and
+// the pool can be reported.
+func countItems(gear addonGear) int {
+	var count int
+	for _, item := range gear.Items {
+		if item != nil && item.ID != 0 {
+			count++
+		}
+	}
+	return count
 }

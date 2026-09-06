@@ -6,6 +6,7 @@ import (
 	"math"
 	"runtime"
 	"slices"
+	"strings"
 	"sync"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -71,6 +72,9 @@ type combinedResult struct {
 	Delta    float64 `json:"delta" jsonschema:"DPS difference from the base setup with all of them applied"`
 	DeltaPct float64 `json:"deltaPercent"`
 
+	Equippable bool     `json:"equippable" jsonschema:"whether the combination could be worn. Two changes that are each legal alone can be illegal together."`
+	Problems   []string `json:"problems,omitempty" jsonschema:"why the combination could not be worn"`
+
 	SumOfDeltas float64 `json:"sumOfDeltas" jsonschema:"what the individual measurements add up to, which is what you would have assumed"`
 	Interaction float64 `json:"interaction" jsonschema:"measured minus assumed. Negative means the changes overlap -- a stat cap reached twice, say; positive means they reinforce, like a set bonus completed."`
 	Significant bool    `json:"interactionSignificant" jsonschema:"true when the interaction is larger than the measurement error. When false the changes add up, and picking them one slot at a time was safe."`
@@ -87,6 +91,12 @@ type comparisonRow struct {
 	Significant bool    `json:"significant" jsonschema:"true when the difference is larger than the combined error of both runs. A false here means the variants are indistinguishable at this iteration count, not that they are equal."`
 	Link        string  `json:"link" jsonschema:"share link for this variant"`
 	Error       string  `json:"error,omitempty" jsonschema:"why this variant could not be simulated"`
+
+	// The simulator will happily run gear nobody could wear -- a two-handed weapon beside an
+	// off-hand, two of the same unique trinket -- and report a large gain for it. Checking is
+	// cheap, and an unwearable row presented as the best upgrade is worse than no row at all.
+	Equippable bool     `json:"equippable" jsonschema:"whether this variant's gear could actually be worn in game. A false here means the DPS is real but unreachable."`
+	Problems   []string `json:"problems,omitempty" jsonschema:"why the gear could not be worn"`
 }
 
 func simCompare(config engine.Config) spec.Entry {
@@ -101,6 +111,10 @@ func simCompare(config engine.Config) spec.Entry {
 			"together and reported as `combined`. Read its `interaction`: measuring changes one at a time\n" +
 			"assumes they add up, which stops being true at a stat cap, a set bonus, or a gem swap that\n" +
 			"deactivates a meta gem. An insignificant interaction means picking slot by slot was safe.\n\n" +
+			"Every variant's gear is checked against the rules of the game, because the simulator will run\n" +
+			"gear nobody could wear -- a two-handed weapon beside an off-hand, two of the same unique\n" +
+			"trinket -- and report a large gain for it. Such rows carry `equippable: false` with the reason,\n" +
+			"and rank below anything wearable.\n\n" +
 			"Read `significant` before believing a ranking: a difference smaller than the combined error is\n" +
 			"noise, and the answer is either 'no measurable difference' or 'run it again with more\n" +
 			"iterations'. Searching a large space is done by calling this repeatedly on a narrowing set of\n" +
@@ -214,6 +228,11 @@ func simCompare(config engine.Config) spec.Entry {
 					return 1
 				case a.Error == "" && b.Error != "":
 					return -1
+				// Gear nobody could wear ranks below gear they could, whatever it sims for.
+				case !a.Equippable && b.Equippable:
+					return 1
+				case a.Equippable && !b.Equippable:
+					return -1
 				case a.Dps > b.Dps:
 					return -1
 				case a.Dps < b.Dps:
@@ -251,6 +270,8 @@ func combine(config engine.Config, base *proto.IndividualSimSettings, variants [
 		switch {
 		case !measured || row.Error != "":
 			result.Excluded[label] = "it did not run"
+		case !row.Equippable:
+			result.Excluded[label] = "the gear could not be worn: " + strings.Join(row.Problems, "; ")
 		case row.Delta <= 0:
 			result.Excluded[label] = "it was not an improvement"
 		case len(variant.Items) == 0:
@@ -284,6 +305,9 @@ func combine(config engine.Config, base *proto.IndividualSimSettings, variants [
 	}
 
 	result.Dps, result.StdErr, result.Link = row.Dps, row.StdErr, row.Link
+	// Two changes that are each legal can still be illegal together -- two unique trinkets, or a
+	// meta gem whose colours the pair of swaps breaks -- so the combination is checked too.
+	result.Equippable, result.Problems = row.Equippable, row.Problems
 	result.Delta = round(row.Dps - baseRow.Dps)
 	if baseRow.Dps != 0 {
 		result.DeltaPct = round(100 * result.Delta / baseRow.Dps)
@@ -334,12 +358,17 @@ func runComparison(config engine.Config, label string, settings *proto.Individua
 		return comparisonRow{}, err
 	}
 
-	return comparisonRow{
+	row := comparisonRow{
 		Label:  label,
 		Dps:    summary.Dps.Avg,
 		StdErr: summary.Dps.StdErr,
 		Link:   link,
-	}, nil
+	}
+	if settings.Player != nil && settings.Player.Equipment != nil {
+		row.Problems = engine.GearLookup().ValidateEquipment(settings.Player.Equipment)
+	}
+	row.Equippable = len(row.Problems) == 0
+	return row, nil
 }
 
 // applyVariant returns a copy of base with the variant's changes applied. The base is untouched,

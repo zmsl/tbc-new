@@ -1552,7 +1552,7 @@ Read-only.
     },
     "bags": {
       "type": "string",
-      "description": "an optional second export listing items in your bags, as an EquipmentSpec JSON. Returned as a candidate pool to compare against what you are wearing."
+      "description": "a separate bags export, as an EquipmentSpec JSON. Only needed for older addon versions: a current export carries the bags and bank inline and they are read automatically."
     }
   },
   "required": [
@@ -2479,6 +2479,11 @@ together and reported as `combined`. Read its `interaction`: measuring changes o
 assumes they add up, which stops being true at a stat cap, a set bonus, or a gem swap that
 deactivates a meta gem. An insignificant interaction means picking slot by slot was safe.
 
+Every variant's gear is checked against the rules of the game, because the simulator will run
+gear nobody could wear -- a two-handed weapon beside an off-hand, two of the same unique
+trinket -- and report a large gain for it. Such rows carry `equippable: false` with the reason,
+and rank below anything wearable.
+
 Read `significant` before believing a ranking: a difference smaller than the combined error is
 noise, and the answer is either 'no measurable difference' or 'run it again with more
 iterations'. Searching a large space is done by calling this repeatedly on a narrowing set of
@@ -2675,6 +2680,20 @@ Read-only.
         "error": {
           "type": "string",
           "description": "why this variant could not be simulated"
+        },
+        "equippable": {
+          "type": "boolean",
+          "description": "whether this variant's gear could actually be worn in game. A false here means the DPS is real but unreachable."
+        },
+        "problems": {
+          "type": [
+            "null",
+            "array"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "description": "why the gear could not be worn"
         }
       },
       "description": "the unchanged setup, which every variant is measured against",
@@ -2683,7 +2702,8 @@ Read-only.
         "dps",
         "stderr",
         "significant",
-        "link"
+        "link",
+        "equippable"
       ],
       "additionalProperties": false
     },
@@ -2724,6 +2744,20 @@ Read-only.
           "error": {
             "type": "string",
             "description": "why this variant could not be simulated"
+          },
+          "equippable": {
+            "type": "boolean",
+            "description": "whether this variant's gear could actually be worn in game. A false here means the DPS is real but unreachable."
+          },
+          "problems": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "why the gear could not be worn"
           }
         },
         "required": [
@@ -2731,7 +2765,8 @@ Read-only.
           "dps",
           "stderr",
           "significant",
-          "link"
+          "link",
+          "equippable"
         ],
         "additionalProperties": false
       },
@@ -2773,6 +2808,20 @@ Read-only.
         "deltaPercent": {
           "type": "number"
         },
+        "equippable": {
+          "type": "boolean",
+          "description": "whether the combination could be worn. Two changes that are each legal alone can be illegal together."
+        },
+        "problems": {
+          "type": [
+            "null",
+            "array"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "description": "why the combination could not be worn"
+        },
         "sumOfDeltas": {
           "type": "number",
           "description": "what the individual measurements add up to, which is what you would have assumed"
@@ -2797,6 +2846,7 @@ Read-only.
         "stderr",
         "delta",
         "deltaPercent",
+        "equippable",
         "sumOfDeltas",
         "interaction",
         "interactionSignificant",

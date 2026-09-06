@@ -10,14 +10,16 @@ import (
 )
 
 type comparisonRow struct {
-	Label       string  `json:"label"`
-	Dps         float64 `json:"dps"`
-	StdErr      float64 `json:"stderr"`
-	Delta       float64 `json:"delta"`
-	DeltaPct    float64 `json:"deltaPercent"`
-	Significant bool    `json:"significant"`
-	Link        string  `json:"link"`
-	Error       string  `json:"error"`
+	Label       string   `json:"label"`
+	Dps         float64  `json:"dps"`
+	StdErr      float64  `json:"stderr"`
+	Delta       float64  `json:"delta"`
+	DeltaPct    float64  `json:"deltaPercent"`
+	Significant bool     `json:"significant"`
+	Link        string   `json:"link"`
+	Error       string   `json:"error"`
+	Equippable  bool     `json:"equippable"`
+	Problems    []string `json:"problems"`
 }
 
 type compareOutput struct {
@@ -430,5 +432,135 @@ func TestCompareBatchExcludesWhatCannotCombine(t *testing.T) {
 				t.Errorf("two trinkets for the same slot were combined: %+v", output.Combined)
 			}
 		}
+	}
+}
+
+// The simulator runs whatever gear it is given, including gear nobody could wear. A fury warrior
+// handed a two-handed weapon while keeping an off-hand measures as a large upgrade and is not one:
+// dropping the off-hand to wear it costs several hundred DPS. Presenting the first as the answer
+// would be worse than returning nothing.
+func TestCompareBatchFlagsUnwearableVariants(t *testing.T) {
+	session := connect(t)
+
+	output := callTool[compareOutput](t, session, "sim_compare_batch", map[string]any{
+		"spec": "DpsWarrior",
+		// p5_fury rather than p3_fury: the phase 3 set is one of the eleven the repository ships
+		// with a dead meta gem, so its base would be unwearable and prove nothing here.
+		"gearSet":    "p5_fury",
+		"rotation":   "fury",
+		"iterations": 500,
+		"variants": []map[string]any{
+			// Stormherald, a two-handed mace, with the off-hand left on.
+			{"label": "two-hander, off-hand kept", "items": []map[string]any{{"slot": "MainHand", "itemId": 28442}}},
+			// The same swap done legally.
+			{"label": "two-hander, off-hand emptied", "items": []map[string]any{
+				{"slot": "MainHand", "itemId": 28442},
+				{"slot": "OffHand", "itemId": 0},
+			}},
+		},
+	})
+
+	rows := map[string]comparisonRow{}
+	for _, row := range output.Results {
+		rows[row.Label] = row
+	}
+
+	illegal := rows["two-hander, off-hand kept"]
+	if illegal.Equippable {
+		t.Error("a two-hander beside an off-hand was reported as wearable")
+	}
+	if len(illegal.Problems) == 0 {
+		t.Error("no reason given for the unwearable gear")
+	}
+
+	legal := rows["two-hander, off-hand emptied"]
+	if !legal.Equippable {
+		t.Errorf("emptying the off-hand should make it wearable, but: %v", legal.Problems)
+	}
+
+	// Whatever they simulate for, an unwearable row must never outrank a wearable one.
+	for i, row := range output.Results {
+		if !row.Equippable {
+			for _, later := range output.Results[i+1:] {
+				if later.Equippable && later.Error == "" {
+					t.Errorf("unwearable %q ranked above wearable %q", row.Label, later.Label)
+				}
+			}
+		}
+	}
+
+	if output.Base.Equippable != true {
+		t.Errorf("the base gear was reported unwearable: %v", output.Base.Problems)
+	}
+}
+
+// The current addon export carries the character, its spec and the bags in one JSON.
+const combinedExport = `{"talents":"34005021302010000000000-050500055050120501150-0000000000000000000000",
+ "class":"warrior","race":"Human","level":70,"spec":"fury","version":"v3.2.4",
+ "professions":[{"name":"Blacksmithing","level":375},{"name":"Engineering","level":375}],
+ "gear":{"items":[{"enchant":3003,"gems":[32409,32193],"id":30972},{"id":32591},{"enchant":2986,"gems":[32217,32211],"id":30979},
+  {"enchant":368,"id":33122},{"enchant":2661,"gems":[24058,24067,24027],"id":30118},{"enchant":2647,"gems":[32193],"id":30057},
+  {"enchant":684,"id":32608},{"id":30032,"gems":[24054,24058]},{"enchant":3012,"gems":[24027],"id":30121},{"enchant":2939,"id":30081},
+  {"id":28757},{"id":28730},{"id":32505},{"id":28830},{"enchant":2673,"id":28439},{"enchant":2673,"id":30082},{"enchant":2723,"id":30105}]},
+ "bagItems":{"items":[{"enchant":2667,"id":28442},{"id":28606},{"enchant":3003,"gems":[25894,32205],"id":30488},
+  {"id":5956},{"id":21647}]}}`
+
+func TestImportCombinedExport(t *testing.T) {
+	session := connect(t)
+
+	output := callTool[struct {
+		Link    string          `json:"link"`
+		Summary settingsSummary `json:"summary"`
+		Pool    []struct {
+			ItemID  int32    `json:"itemId"`
+			Name    string   `json:"name"`
+			Slots   []string `json:"slots"`
+			Enchant int32    `json:"enchant"`
+			Gems    []int32  `json:"gems"`
+		} `json:"pool"`
+		Notes []string `json:"notes"`
+	}](t, session, "import_addon", map[string]any{"export": combinedExport})
+
+	// The export names its own spec, so the caller should not have to.
+	if output.Summary.Spec != "DpsWarrior" {
+		t.Errorf("imported as %s", output.Summary.Spec)
+	}
+	if output.Summary.Talents != "34005021302010000000000-050500055050120501150-0000000000000000000000" {
+		t.Errorf("talents = %s", output.Summary.Talents)
+	}
+
+	notes := strings.Join(output.Notes, " | ")
+	// A fury warrior must not be handed the arms rotation, which is what sorting the presets
+	// alphabetically would do.
+	if !strings.Contains(notes, `using the "fury" rotation`) {
+		t.Errorf("the fury rotation was not chosen: %s", notes)
+	}
+	if !strings.Contains(notes, `simulated as DpsWarrior`) {
+		t.Errorf("the spec choice was not reported: %s", notes)
+	}
+	// Bags arrive inline now, and hold things the simulator has no record of.
+	if !strings.Contains(notes, "bags and bank") || !strings.Contains(notes, "skipped") {
+		t.Errorf("the bag contents were not accounted for: %s", notes)
+	}
+
+	// Four of the five bag entries are gear; the fifth is a Blacksmith Hammer, which the simulator
+	// has no record of and cannot be a candidate.
+	if len(output.Pool) != 4 {
+		t.Fatalf("pool has %d items, want the 4 the simulator knows", len(output.Pool))
+	}
+	for _, item := range output.Pool {
+		if item.Name == "" || len(item.Slots) == 0 {
+			t.Errorf("pool item %d is not usable as a candidate: %+v", item.ItemID, item)
+		}
+		// A bag item's own enchant and gems have to survive, or swapping it in understates it.
+		if item.ItemID == 30488 && (item.Enchant != 3003 || len(item.Gems) != 2) {
+			t.Errorf("the helm lost its enchant or gems: %+v", item)
+		}
+	}
+
+	// And the whole thing has to simulate.
+	run := callTool[simRunOutput](t, session, "sim_run", map[string]any{"link": output.Link, "iterations": 200})
+	if run.Result == nil || run.Result.Dps.Avg <= 0 {
+		t.Error("the imported character did not simulate")
 	}
 }
