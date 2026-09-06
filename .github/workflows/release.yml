@@ -57,6 +57,13 @@ jobs:
               run: |
                   make clean && VERSION=${{ github.event.inputs.tag }} make release
 
+            # One bundle per platform, stamped with the tag: Claude Desktop compares that
+            # version against what is installed to decide whether an update exists.
+            - name: Pack MCP bundles 🔧
+              run: make mcp-bundle MCPB_VERSION=${TAG#v}
+              env:
+                  TAG: ${{ github.event.inputs.tag }}
+
             - name: Release
               uses: ncipollo/release-action@v1
               with:
@@ -73,118 +80,15 @@ jobs:
                       wowsimtbc-arm64-darwin.zip
                       wowsimtbc-amd64-linux.zip
                       wowsimtbc-windows.exe.zip
+                      mcp/dist/*.mcpb
 
-    # The Go sim engine that ships inside the desktop bundle. Built on Linux because the
-    # makefile depends on Unix tooling for the client build, and Go cross-compiles the
-    # per-platform sidecars from here without any extra toolchain.
-    desktop-sidecars:
-        needs: tests
-        runs-on: ubuntu-latest
-        steps:
-            - name: Checkout
-              uses: actions/checkout@v5
-              with:
-                  ref: ${{ github.event.inputs.ref }}
-
-            - name: Install Go
-              uses: actions/setup-go@v6
-              with:
-                  go-version: 1.25.x
-
-            - name: Install Protoc
-              uses: arduino/setup-protoc@v3
-              with:
-                  version: 3.x
-                  repo-token: ${{ secrets.GITHUB_TOKEN }}
-
-            - name: Install Protoc Go plugin
-              run: go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
-
-            - name: Install Node
-              uses: actions/setup-node@v5
-              with:
-                  node-version: 22
-                  cache: npm
-
-            - name: Install npm dependencies
-              run: npm ci
-
-            - name: Build sidecars 🔧
-              run: VERSION=${{ github.event.inputs.tag }} make desktop-sidecar-win desktop-sidecar-mac
-
-            - name: Upload sidecars
-              uses: actions/upload-artifact@v4
-              with:
-                  name: desktop-sidecars
-                  path: desktop/build/sidecar/
-                  retention-days: 1
-
-    # Installers must be built on their own platform: dmg creation needs macOS, and building
-    # NSIS on Windows keeps the door open for code signing later.
-    desktop-package:
-        needs: [desktop-sidecars, build-and-release]
+    # Installers for the Electron app, built by the same workflow that pull requests use.
+    desktop:
+        needs: [tests, build-and-release]
         permissions:
             contents: write
-        strategy:
-            fail-fast: false
-            matrix:
-                include:
-                    - os: windows-latest
-                      args: --win nsis
-                      artifacts: desktop-dist/*.exe,desktop-dist/*.blockmap,desktop-dist/latest.yml
-                    - os: macos-latest
-                      args: --mac dmg zip
-                      artifacts: desktop-dist/*.dmg,desktop-dist/*.zip,desktop-dist/*.blockmap,desktop-dist/latest-mac.yml
-        runs-on: ${{ matrix.os }}
-        steps:
-            - name: Checkout
-              uses: actions/checkout@v5
-              with:
-                  ref: ${{ github.event.inputs.ref }}
-
-            - name: Install Node
-              uses: actions/setup-node@v5
-              with:
-                  node-version: 22
-                  cache: npm
-                  cache-dependency-path: desktop/package-lock.json
-
-            - name: Download sidecars
-              uses: actions/download-artifact@v4
-              with:
-                  name: desktop-sidecars
-                  path: desktop/build/sidecar
-
-            - name: Stage icon and restore sidecar permissions
-              shell: bash
-              run: |
-                  cp assets/favicon_io/android-chrome-512x512.png desktop/build/icon.png
-                  chmod +x desktop/build/sidecar/* || true
-
-            # electron-updater compares releases against this version. If it drifts from the
-            # tag, the app never sees the update it is sitting on.
-            - name: Set desktop version
-              shell: bash
-              working-directory: desktop
-              run: npm version --no-git-tag-version --allow-same-version "${TAG#v}"
-              env:
-                  TAG: ${{ github.event.inputs.tag }}
-
-            - name: Install desktop dependencies
-              working-directory: desktop
-              run: npm ci
-
-            - name: Build installer 🔧
-              working-directory: desktop
-              run: npx electron-builder ${{ matrix.args }} --publish never
-
-            - name: Attach to release
-              uses: ncipollo/release-action@v1
-              with:
-                  tag: ${{ github.event.inputs.tag }}
-                  allowUpdates: true
-                  omitBodyDuringUpdate: true
-                  omitNameDuringUpdate: true
-                  updateOnlyUnreleased: false
-                  artifactErrorsFailBuild: true
-                  artifacts: ${{ matrix.artifacts }}
+        uses: ./.github/workflows/desktop_build.yml
+        with:
+            ref: ${{ github.event.inputs.ref }}
+            tag: ${{ github.event.inputs.tag }}
+            publish: true

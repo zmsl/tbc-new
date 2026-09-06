@@ -102,3 +102,41 @@ jobs:
                   GOARCH: amd64
               run: |
                   go list ./sim/... | awk 'NR % 4 == ${{ matrix.shard }}' | xargs -r go test --tags=with_db
+
+    # The MCP server is its own Go module, so the shards above -- which list ./sim/... -- never
+    # see it, and a breaking change in sim/core would surface only when someone built it by
+    # hand. No Node here: the item database is committed and nothing in this module shells out
+    # to npx, which keeps the job to a couple of minutes.
+    mcp:
+        runs-on: ubuntu-latest
+        timeout-minutes: 20
+        steps:
+            - name: Checkout 🛎️
+              uses: actions/checkout@v5
+              with:
+                  ref: ${{ inputs.ref }}
+
+            - name: Install Go
+              uses: actions/setup-go@v6
+              with:
+                  go-version: 1.25.x
+
+            - name: Install Protoc
+              uses: arduino/setup-protoc@v3
+              with:
+                  version: 3.x
+                  repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+            - name: Install Protoc Go plugin
+              run: go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+
+            # Covers the generated documentation and the bundle manifest as well: both are
+            # committed, and TestReferenceIsUpToDate and TestManifestIsUpToDate fail when
+            # either has gone stale.
+            - name: Test 🧪
+              run: make mcp-test
+
+            # Packing cross-compiles every published platform and renders each one's manifest,
+            # so a broken bundle fails here rather than halfway through a release.
+            - name: Pack bundles 🔧
+              run: make mcp-bundle
