@@ -82,7 +82,9 @@ func benchmarkRequest() *proto.RaidSimRequest {
 						},
 					},
 				},
-				Rotation: core.GetAplRotation("../../../ui/shaman/elemental/apls", "default").Rotation,
+				// See feralcat_test.go: unset lands on the 10ms floor, which is not what anyone runs.
+				ReactionTimeMs: 100,
+				Rotation:       core.GetAplRotation("../../../ui/shaman/elemental/apls", "default").Rotation,
 			},
 			nil, nil, nil,
 		),

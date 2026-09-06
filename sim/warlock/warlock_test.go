@@ -111,7 +111,9 @@ func benchmarkRequest() *proto.RaidSimRequest {
 						},
 					},
 				},
-				Rotation: core.GetAplRotation("../../ui/warlock/dps/apls", "affliction").Rotation,
+				// See feralcat_test.go: unset lands on the 10ms floor, which is not what anyone runs.
+				ReactionTimeMs: 100,
+				Rotation:       core.GetAplRotation("../../ui/warlock/dps/apls", "affliction").Rotation,
 			},
 			nil, nil, nil,
 		),
