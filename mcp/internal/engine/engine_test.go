@@ -200,3 +200,102 @@ func mustTalents(t *testing.T, config engine.Config, spec proto.Spec) []engine.T
 	}
 	return presets
 }
+
+// The phase numbers are inferred from preset names, so the inference is worth pinning: it is the
+// difference between "the phase 3 candidates" being a question an agent can answer and one it has
+// to guess at.
+func TestDescribeGearSetNames(t *testing.T) {
+	config := testConfig()
+
+	sets, err := config.DescribeGearSets(proto.Spec_SpecSmitePriest)
+	if err != nil {
+		t.Fatalf("describe: %v", err)
+	}
+
+	byName := map[string]engine.GearSetInfo{}
+	for _, set := range sets {
+		byName[set.Name] = set
+	}
+
+	if p3 := byName["p3"]; p3.Phase != 3 || p3.PreRaid || p3.Items < 15 || !p3.Equippable {
+		t.Errorf("p3 described as %+v", p3)
+	}
+	if preRaid := byName["pre_raid"]; !preRaid.PreRaid || preRaid.Phase != 0 {
+		t.Errorf("pre_raid described as %+v", preRaid)
+	}
+}
+
+// Names come in half a dozen shapes across the specs, and each one is a real preset in the tree.
+func TestGearSetNameInference(t *testing.T) {
+	config := testConfig()
+
+	// Spec, preset name, expected phase, expected pre-raid, expected variant.
+	for _, tc := range []struct {
+		spec    proto.Spec
+		name    string
+		phase   int
+		preRaid bool
+		variant string
+	}{
+		{proto.Spec_SpecSmitePriest, "p3", 3, false, ""},
+		{proto.Spec_SpecSmitePriest, "pre_raid", 0, true, ""},
+		{proto.Spec_SpecDpsWarrior, "p3_fury_t6", 3, false, "fury t6"},
+		{proto.Spec_SpecDpsWarrior, "p1_arms", 1, false, "arms"},
+		{proto.Spec_SpecMage, "p3ArcaneStaff", 3, false, "arcane staff"},
+		{proto.Spec_SpecMage, "preBisArcane", 0, true, "arcane"},
+		{proto.Spec_SpecHunter, "phase_1/bm/2h_6p", 1, false, "bm 2h 6p"},
+		// A pre-raid set filed under a phase directory is pre-raid, not phase 1.
+		{proto.Spec_SpecHunter, "phase_1/bm/pre_raid", 0, true, "bm"},
+		{proto.Spec_SpecWarlock, "t6", 3, false, ""},
+		{proto.Spec_SpecWarlock, "destro_fire_t4", 1, false, "destro fire"},
+		{proto.Spec_SpecWarlock, "swp", 5, false, ""},
+		{proto.Spec_SpecWarlock, "za", 4, false, ""},
+		{proto.Spec_SpecProtectionWarrior, "p2_hydross", 2, false, "hydross"},
+		{proto.Spec_SpecBalanceDruid, "preraid", 0, true, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sets, err := config.DescribeGearSets(tc.spec)
+			if err != nil {
+				t.Fatalf("describe: %v", err)
+			}
+
+			var found *engine.GearSetInfo
+			for i := range sets {
+				if sets[i].Name == tc.name {
+					found = &sets[i]
+				}
+			}
+			if found == nil {
+				t.Fatalf("%s has no gear set named %q any more", specName(tc.spec), tc.name)
+			}
+			if found.Phase != tc.phase || found.PreRaid != tc.preRaid || found.Variant != tc.variant {
+				t.Errorf("got phase %d, preRaid %v, variant %q; want %d, %v, %q",
+					found.Phase, found.PreRaid, found.Variant, tc.phase, tc.preRaid, tc.variant)
+			}
+		})
+	}
+}
+
+// The unwearable presets have to be reported as such, since that is the one checked fact here.
+func TestDescribeGearSetsFlagsUnwearableSets(t *testing.T) {
+	config := testConfig()
+
+	sets, err := config.DescribeGearSets(proto.Spec_SpecEnhancementShaman)
+	if err != nil {
+		t.Fatalf("describe: %v", err)
+	}
+
+	var flagged int
+	for _, set := range sets {
+		if !set.Equippable {
+			flagged++
+			if len(set.Problems) == 0 {
+				t.Errorf("%s is not equippable but says nothing about why", set.Name)
+			}
+		}
+	}
+	// p1 and preraid have their belt and gloves in each other's slots.
+	if flagged < 2 {
+		t.Errorf("expected the known-broken enhancement sets to be flagged, got %d", flagged)
+	}
+}

@@ -3088,6 +3088,22 @@ Examples:
 
 Returns `application/json`.
 
+### `wowsims://spec/{class}/{spec}/gear` — Gear sets
+
+Every checked-in gear set for a spec, with the raid phase it is for, what makes it different from the others, and whether it can actually be worn.
+
+Use this to pick candidates for a phase, then simulate them with sim_compare_batch. Most
+specs ship several sets per phase -- a talent variant, a weapon setup, a set-bonus count --
+so 'the phase 3 set' is usually a choice rather than a lookup.
+
+The phase numbers are inferred from the preset names; `equippable` is the only checked fact
+in here, and it fails today for eleven of the sets in the repository.
+
+Examples:
+- candidates for a smite priest: wowsims://spec/priest/smite/gear
+
+Returns `application/json`.
+
 ### `wowsims://spec/{class}/{spec}/talents` — Talent builds
 
 The talent builds checked in for a spec, as wowhead-format strings.

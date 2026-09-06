@@ -298,3 +298,82 @@ func TestResources(t *testing.T) {
 		t.Error("expected an error for an unknown item")
 	}
 }
+
+// The gear index is the answer to "what are my options for phase N": it says which phase each
+// checked-in set is for, what distinguishes the ones that share a phase, and whether each is
+// actually wearable.
+func TestGearIndexResource(t *testing.T) {
+	session := connect(t)
+
+	read := func(uri string) string {
+		t.Helper()
+		result, err := session.ReadResource(t.Context(), &mcp.ReadResourceParams{URI: uri})
+		if err != nil {
+			t.Fatalf("read %s: %v", uri, err)
+		}
+		return result.Contents[0].Text
+	}
+
+	var index struct {
+		Spec      string `json:"spec"`
+		PhaseNote string `json:"phaseNote"`
+		GearSets  []struct {
+			Name       string   `json:"name"`
+			Phase      int      `json:"phase"`
+			PreRaid    bool     `json:"preRaid"`
+			Variant    string   `json:"variant"`
+			Items      int      `json:"items"`
+			Equippable bool     `json:"equippable"`
+			Problems   []string `json:"problems"`
+		} `json:"gearSets"`
+	}
+	if err := json.Unmarshal([]byte(read("wowsims://spec/priest/smite/gear")), &index); err != nil {
+		t.Fatalf("decode index: %v", err)
+	}
+
+	if index.Spec != "SmitePriest" {
+		t.Errorf("index is for %s", index.Spec)
+	}
+	// The phases are inferred, and the response has to say so rather than presenting them as fact.
+	if !strings.Contains(index.PhaseNote, "preset names") {
+		t.Errorf("the index does not explain where its phases come from: %q", index.PhaseNote)
+	}
+	if len(index.GearSets) < 6 {
+		t.Fatalf("only %d gear sets listed", len(index.GearSets))
+	}
+
+	var phase3 int
+	for _, set := range index.GearSets {
+		if set.Phase == 3 {
+			phase3++
+			if set.Items < 15 {
+				t.Errorf("%s fills only %d slots", set.Name, set.Items)
+			}
+		}
+		if !set.Equippable && len(set.Problems) == 0 {
+			t.Errorf("%s is unwearable but says nothing about why", set.Name)
+		}
+	}
+	if phase3 == 0 {
+		t.Error("no phase 3 set was identified")
+	}
+
+	// A spec whose sets need distinguishing within a phase must actually distinguish them.
+	if err := json.Unmarshal([]byte(read("wowsims://spec/warrior/dps/gear")), &index); err != nil {
+		t.Fatalf("decode warrior index: %v", err)
+	}
+	variants := map[string]bool{}
+	for _, set := range index.GearSets {
+		if set.Phase == 3 {
+			variants[set.Variant] = true
+		}
+	}
+	if len(variants) < 2 {
+		t.Errorf("the warrior's phase 3 sets were not told apart: %v", variants)
+	}
+
+	// The index and the individual sets live at different URIs and both must work.
+	if gear := read("wowsims://spec/priest/smite/gear/p3"); !strings.Contains(gear, "32525") {
+		t.Errorf("reading a single set through the index's sibling URI broke: %.80s", gear)
+	}
+}

@@ -32,6 +32,7 @@ func Entries(config engine.Config) []spec.Entry {
 		presetResource(config, engine.PresetBuild, "build", "Build",
 			"A checked-in build: gear, talents, rotation and encounter together, in the same shape a share link carries.",
 			"wowsims://spec/warrior/protection/build/default_encounter_only"),
+		gearIndexResource(config),
 		talentsResource(config),
 		itemResource(),
 	}
@@ -59,6 +60,51 @@ func presetResource(config engine.Config, kind engine.PresetKind, segment, title
 				return nil, err
 			}
 			return jsonResult(request.Params.URI, data), nil
+		},
+	}
+}
+
+// The gear sets, described rather than served: which phase each is for, what distinguishes it
+// from the others in that phase, and whether it is actually wearable. Reading each set to work
+// that out one by one is the alternative, and none of it is in the files themselves.
+func gearIndexResource(config engine.Config) spec.Entry {
+	return spec.Resource{
+		URI:   scheme + "spec/{class}/{spec}/gear",
+		Name:  "gear-index",
+		Title: "Gear sets",
+		Summary: "Every checked-in gear set for a spec, with the raid phase it is for, what makes it " +
+			"different from the others, and whether it can actually be worn.",
+		Details: "Use this to pick candidates for a phase, then simulate them with sim_compare_batch. Most\n" +
+			"specs ship several sets per phase -- a talent variant, a weapon setup, a set-bonus count --\n" +
+			"so 'the phase 3 set' is usually a choice rather than a lookup.\n\n" +
+			"The phase numbers are inferred from the preset names; `equippable` is the only checked fact\n" +
+			"in here, and it fails today for eleven of the sets in the repository.",
+		MIMEType: "application/json",
+		Examples: []spec.Example{{Description: "candidates for a smite priest", Args: "wowsims://spec/priest/smite/gear"}},
+		Handler: func(ctx context.Context, request *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+			resolved, _, err := parseSpecURI(request.Params.URI, "gear")
+			if err != nil {
+				return nil, err
+			}
+
+			sets, err := config.DescribeGearSets(resolved)
+			if err != nil {
+				return nil, err
+			}
+
+			encoded, err := json.MarshalIndent(struct {
+				Spec      string               `json:"spec"`
+				PhaseNote string               `json:"phaseNote"`
+				GearSets  []engine.GearSetInfo `json:"gearSets"`
+			}{
+				Spec:      strings.TrimPrefix(resolved.String(), "Spec"),
+				PhaseNote: engine.PhaseHeuristic,
+				GearSets:  sets,
+			}, "", "  ")
+			if err != nil {
+				return nil, err
+			}
+			return jsonResult(request.Params.URI, encoded), nil
 		},
 	}
 }
@@ -129,6 +175,8 @@ func parseSpecURI(uri, segment string) (proto.Spec, string, error) {
 	}
 
 	parts := strings.Split(rest, "/")
+	// Three parts is the index form -- ".../gear" with no name after it -- which the gear and
+	// talents resources use.
 	if len(parts) < 3 || parts[2] != segment {
 		return proto.Spec_SpecUnknown, "", fmt.Errorf("expected %sspec/{class}/{spec}/%s/{name}, got %s", scheme, segment, uri)
 	}

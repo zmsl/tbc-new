@@ -46,13 +46,14 @@ func findBiS() spec.Entry {
 
 			return message("Find the best gear set for %s available by phase %s, fighting %s.\n\n"+
 				"Work like this:\n\n"+
-				"1. Start from the best checked-in gear set as a baseline: `settings_create` with that spec, then `sim_run` on the link. That is the number to beat, and if nothing beats it, say so.\n"+
-				"2. `sim_stat_weights` on the baseline. The weights say what a point of each stat is worth, and they are how candidates get ranked without simulating every one.\n"+
-				"3. For each slot worth changing, `db_search_items` with `maxPhase: %s`, the spec's class, and the slot. Score the results with the stat weights and keep the best three to five per slot.\n"+
-				"4. Narrow with `sim_compare_batch`, one slot at a time, starting from the slots where the candidates differ most. Each call compares the current best set against the candidates for one slot; keep the winner and move on. This converges in a few calls per slot rather than combinatorially.\n"+
-				"5. Watch `significant` on every row. When a difference is not significant, the two options are indistinguishable at that iteration count -- either say so and pick on another basis, or re-run the close pair with more iterations.\n"+
-				"6. Before trusting the final set, `gear_validate` it. Unique-equipped items, meta gem colour requirements and enchant restrictions are not enforced by the simulator, and a set that breaks them is not a real answer.\n"+
-				"7. Re-run the finalists at 20000 iterations or more to separate the last few DPS, then report the set, its DPS with the error, the gain over the baseline, and the share link.\n\n"+
+				"1. Read `wowsims://spec/{class}/{spec}/gear` for the sets already checked in. It says which phase each is for, what distinguishes the ones that share a phase, and whether each can actually be worn -- start from the best wearable one at or below your target phase.\n"+
+				"2. Establish the baseline: `settings_create` with that spec, then `sim_run` on the link. That is the number to beat, and if nothing beats it, say so.\n"+
+				"3. `sim_stat_weights` on the baseline. The weights say what a point of each stat is worth, and they are how candidates get ranked without simulating every one.\n"+
+				"4. For each slot worth changing, `db_search_items` with `maxPhase: %s`, the spec's class, and the slot. Score the results with the stat weights and keep the best three to five per slot.\n"+
+				"5. Narrow with `sim_compare_batch`, one slot at a time, starting from the slots where the candidates differ most. Each call compares the current best set against the candidates for one slot; keep the winner and move on. This converges in a few calls per slot rather than combinatorially.\n"+
+				"6. Watch `significant` on every row. When a difference is not significant, the two options are indistinguishable at that iteration count -- either say so and pick on another basis, or re-run the close pair with more iterations.\n"+
+				"7. Before trusting the final set, `gear_validate` it. Unique-equipped items, meta gem colour requirements and enchant restrictions are not enforced by the simulator, and a set that breaks them is not a real answer.\n"+
+				"8. Re-run the finalists at 20000 iterations or more to separate the last few DPS, then report the set, its DPS with the error, the gain over the baseline, and the share link.\n\n"+
 				"State the assumptions you optimised under -- encounter, buffs, talents, rotation -- because a 'best' set is only best for those.",
 				specName, phase, encounter, phase)
 		},
