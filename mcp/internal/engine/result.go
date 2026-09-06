@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"fmt"
 	"math"
 	"slices"
 	"strings"
@@ -198,7 +199,16 @@ func actionName(action *proto.ActionMetrics, unit, player *proto.UnitMetrics) st
 		}
 	}
 	if name == "" {
-		name = "Unknown"
+		// The client database does not name every spell -- Holy Fire, for one, is missing from it
+		// and the website falls back to fetching its tooltip from Wowhead. Reporting the id beats
+		// reporting "Unknown": it can be looked up, and it says which spell is unnamed.
+		if spellID := action.Id.GetSpellId(); spellID != 0 {
+			name = fmt.Sprintf("Spell %d", spellID)
+		} else if itemID := action.Id.GetItemId(); itemID != 0 {
+			name = fmt.Sprintf("Item %d", itemID)
+		} else {
+			name = "Unknown"
+		}
 	}
 
 	if unit != player && unit.Name != "" {
