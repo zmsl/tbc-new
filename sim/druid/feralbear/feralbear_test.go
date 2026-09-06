@@ -89,8 +89,10 @@ func TestFeralBear(t *testing.T) {
 	}))
 }
 
-func BenchmarkSimulate(b *testing.B) {
-	rsr := &proto.RaidSimRequest{
+// The rotation is the real APL preset rather than TypeSimple: the APL interpreter is the
+// largest single cost in the profile, so a benchmark that bypasses it measures the wrong thing.
+func benchmarkRequest() *proto.RaidSimRequest {
+	return &proto.RaidSimRequest{
 		Raid: core.SinglePlayerRaidProto(
 			&proto.Player{
 				Class:         proto.Class_ClassDruid,
@@ -99,9 +101,7 @@ func BenchmarkSimulate(b *testing.B) {
 				Equipment:     core.GetGearSet("../../../ui/druid/feralbear/gear_sets", "p1").GearSet,
 				Consumables:   DefaultConsumables,
 				Spec:          DefaultSpecOptions,
-				Rotation: &proto.APLRotation{
-					Type: proto.APLRotation_TypeSimple,
-				},
+				Rotation:      core.GetAplRotation("../../../ui/druid/feralbear/apls", "default").Rotation,
 			},
 			nil, nil, nil,
 		),
@@ -111,8 +111,16 @@ func BenchmarkSimulate(b *testing.B) {
 		},
 		SimOptions: core.AverageDefaultSimTestOptions,
 	}
+}
 
-	core.RaidBenchmark(b, rsr)
+// Setup plus one iteration. Dominated by NewEnvironment; tracks the cost paid once per RunSim.
+func BenchmarkSimulate(b *testing.B) {
+	core.RaidBenchmark(b, benchmarkRequest())
+}
+
+// The event loop alone, with setup amortized away.
+func BenchmarkIteration(b *testing.B) {
+	core.RaidIterationBenchmark(b, benchmarkRequest())
 }
 
 const DefaultTalents = "-503032132322105301251-05503301"

@@ -25,6 +25,10 @@ mcp/dist/
 
 # temporary files
 *.results.tmp
+
+# Performance snapshots and profiles from tools/perf. Machine-specific by nature: a timing from
+# one laptop says nothing on another, so these are never shared through git.
+/perf/
 package.json.tmp
 .stylelintcache
 

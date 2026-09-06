@@ -62,3 +62,44 @@ var DefaultWeaponTypes = []proto.WeaponType{
 var DefaultRangedWeaponTypes = []proto.RangedWeaponType{
 	proto.RangedWeaponType_RangedWeaponTypeTotem,
 }
+
+// Caster coverage for the perf harness. The configuration mirrors TestElemental above -- same
+// gear, talents and APL preset -- so the benchmark measures what the golden files measure.
+func benchmarkRequest() *proto.RaidSimRequest {
+	return &proto.RaidSimRequest{
+		Raid: core.SinglePlayerRaidProto(
+			&proto.Player{
+				Class:         proto.Class_ClassShaman,
+				Race:          proto.Race_RaceTroll,
+				TalentsString: DefaultTalents,
+				Equipment:     core.GetGearSet("../../../ui/shaman/elemental/gear_sets", "p1_a").GearSet,
+				Spec: &proto.Player_ElementalShaman{
+					ElementalShaman: &proto.ElementalShaman{
+						Options: &proto.ElementalShaman_Options{
+							ClassOptions: &proto.ShamanOptions{
+								ShieldProcrate: 0.0,
+							},
+						},
+					},
+				},
+				Rotation: core.GetAplRotation("../../../ui/shaman/elemental/apls", "default").Rotation,
+			},
+			nil, nil, nil,
+		),
+		Encounter: &proto.Encounter{
+			Duration: 300,
+			Targets:  []*proto.Target{core.NewDefaultTarget()},
+		},
+		SimOptions: core.AverageDefaultSimTestOptions,
+	}
+}
+
+// Setup plus one iteration. Dominated by NewEnvironment; tracks the cost paid once per RunSim.
+func BenchmarkSimulate(b *testing.B) {
+	core.RaidBenchmark(b, benchmarkRequest())
+}
+
+// The event loop alone, with setup amortized away.
+func BenchmarkIteration(b *testing.B) {
+	core.RaidIterationBenchmark(b, benchmarkRequest())
+}

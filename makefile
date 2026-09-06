@@ -411,6 +411,32 @@ update-tests:
 	find . -name "*.results" -type f -delete
 	find . -name "*.results.tmp" -exec bash -c 'cp "$$1" "$${1%.results.tmp}".results' _ {} \;
 
+# Performance harness. Take a baseline before changing anything, then compare against it:
+#
+#   make perf-baseline          # snapshot the tree as it stands
+#   ... make the change ...
+#   make perf-compare           # timings via benchstat, plus a DPS equivalence check
+#
+# PERF_LABEL names the snapshot under perf/ (gitignored), so several can coexist.
+PERF_LABEL ?= current
+
+.PHONY: perf-baseline
+perf-baseline:
+	tools/perf/capture.sh baseline
+
+.PHONY: perf-snapshot
+perf-snapshot:
+	tools/perf/capture.sh $(PERF_LABEL)
+
+.PHONY: perf-compare
+perf-compare: perf-snapshot
+	tools/perf/compare.sh baseline $(PERF_LABEL)
+
+# Regenerates the merged CPU profile the optimization work is aimed at, and the one PGO consumes.
+.PHONY: perf-profile
+perf-profile:
+	tools/perf/profile.sh
+
 .PHONY: fmt
 fmt: tsfmt
 	gofmt -w ./sim

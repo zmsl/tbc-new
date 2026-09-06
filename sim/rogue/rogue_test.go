@@ -66,3 +66,37 @@ var DefaultConsumables = &proto.ConsumesSpec{
 	ConjuredId: 7676,
 	OhImbueId:  27186,
 }
+
+// Energy/combo-point coverage for the perf harness, and the longest priority list of the five
+// benchmarked specs. Mirrors TestRogue above.
+func benchmarkRequest() *proto.RaidSimRequest {
+	return &proto.RaidSimRequest{
+		Raid: core.SinglePlayerRaidProto(
+			&proto.Player{
+				Class:         proto.Class_ClassRogue,
+				Race:          proto.Race_RaceHuman,
+				TalentsString: DefaultTalents,
+				Equipment:     core.GetGearSet("../../ui/rogue/dps/gear_sets", "p1").GearSet,
+				Consumables:   DefaultConsumables,
+				Spec:          DefaultOptions,
+				Rotation:      core.GetAplRotation("../../ui/rogue/dps/apls", "swords").Rotation,
+			},
+			nil, nil, nil,
+		),
+		Encounter: &proto.Encounter{
+			Duration: 300,
+			Targets:  []*proto.Target{core.NewDefaultTarget()},
+		},
+		SimOptions: core.AverageDefaultSimTestOptions,
+	}
+}
+
+// Setup plus one iteration. Dominated by NewEnvironment; tracks the cost paid once per RunSim.
+func BenchmarkSimulate(b *testing.B) {
+	core.RaidBenchmark(b, benchmarkRequest())
+}
+
+// The event loop alone, with setup amortized away.
+func BenchmarkIteration(b *testing.B) {
+	core.RaidIterationBenchmark(b, benchmarkRequest())
+}

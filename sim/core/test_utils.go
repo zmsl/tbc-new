@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"testing"
 
 	"github.com/wowsims/tbc/sim/core/proto"
@@ -32,6 +33,30 @@ var AverageDefaultSimTestOptions = &proto.SimOptions{
 
 const ShortDuration = 60
 const LongDuration = 180
+
+// Overrides for the performance harness in tools/perf. Unset -- which is every normal run,
+// CI included -- these change nothing at all.
+//
+// The harness needs to tell a real DPS shift apart from Monte Carlo noise, which means running
+// the Average tests at a far higher iteration count than a golden-file run wants, and sweeping
+// the seed. Only AverageDefaultSimTestOptions is touched: the short DPS and stat-weight options
+// exist to keep the golden files cheap, and raising those would slow every test for no gain.
+func init() {
+	if v, ok := os.LookupEnv("WOWSIM_PERF_ITERATIONS"); ok {
+		n, err := strconv.ParseInt(v, 10, 32)
+		if err != nil || n <= 0 {
+			log.Fatalf("WOWSIM_PERF_ITERATIONS must be a positive integer, got %q", v)
+		}
+		AverageDefaultSimTestOptions.Iterations = int32(n)
+	}
+	if v, ok := os.LookupEnv("WOWSIM_PERF_SEED"); ok {
+		seed, err := strconv.ParseInt(v, 10, 64)
+		if err != nil {
+			log.Fatalf("WOWSIM_PERF_SEED must be an integer, got %q", v)
+		}
+		AverageDefaultSimTestOptions.RandomSeed = seed
+	}
+}
 
 func FreshDefaultTargetConfig() *proto.Target {
 	return &proto.Target{
@@ -247,6 +272,34 @@ func RaidBenchmark(b *testing.B, rsr *proto.RaidSimRequest) {
 		if result.Error != nil {
 			b.Fatalf("RaidBenchmark() at iteration %d failed: %v", i, result.Error.Message)
 		}
+	}
+}
+
+// RaidIterationBenchmark times the event loop on its own. RaidBenchmark above rebuilds the
+// environment on every op, so roughly 40% of what it reports is NewEnvironment rather than
+// simulation -- useful for measuring setup, misleading for measuring the loop. Here the
+// environment is built once and b.N iterations run inside it, so setup amortizes away and the
+// number is the per-iteration cost.
+//
+// Both are worth keeping: setup is paid once per RunSim, which means once per concurrency split
+// and dozens of times across a stat weight run, so it is a real cost with its own benchmark.
+func RaidIterationBenchmark(b *testing.B, rsr *proto.RaidSimRequest) {
+	rsr.Encounter.Duration = LongDuration
+
+	// Set to false because IsTest adds a lot of computation.
+	rsr.SimOptions.IsTest = false
+
+	// RunRaidSim is the single-threaded entry point, so this measures one core with no
+	// scheduling noise. Iterations is the benchmark's own N: the sim loops internally, which
+	// is exactly the loop being measured.
+	rsr.SimOptions.Iterations = int32(b.N)
+
+	b.ResetTimer()
+	result := RunRaidSim(rsr)
+	b.StopTimer()
+
+	if result.Error != nil {
+		b.Fatalf("RaidIterationBenchmark() failed: %v", result.Error.Message)
 	}
 }
 
