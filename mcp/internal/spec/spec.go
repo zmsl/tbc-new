@@ -12,6 +12,7 @@
 package spec
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 	"strings"
@@ -64,6 +65,10 @@ type Doc struct {
 	Arguments    []Argument
 	MIMEType     string
 	Annotations  *mcp.ToolAnnotations
+	// Text is a prompt's rendered workflow, with no arguments supplied. Prompts are templates, so
+	// this is what one looks like before it is filled in -- which is what the documentation and
+	// the bundle manifest both need to show.
+	Text string
 }
 
 // Argument is a prompt argument.
@@ -278,13 +283,40 @@ func (p Prompt) Validate() error {
 }
 
 func (p Prompt) Doc() (Doc, error) {
+	text, err := p.Render(context.Background(), nil)
+	if err != nil {
+		return Doc{}, fmt.Errorf("prompt %q: %w", p.Name, err)
+	}
+
 	return Doc{
 		Kind:        KindPrompt,
 		ID:          p.Name,
 		Title:       p.Title,
 		Description: describe(p.Summary, p.Details, nil),
 		Arguments:   p.Arguments,
+		Text:        text,
 	}, nil
+}
+
+// Render runs the prompt and returns its text. Handlers fill their own gaps, so rendering with no
+// arguments produces the workflow with placeholders where the specifics would go.
+func (p Prompt) Render(ctx context.Context, arguments map[string]string) (string, error) {
+	if arguments == nil {
+		arguments = map[string]string{}
+	}
+
+	result, err := p.Handler(ctx, &mcp.GetPromptRequest{Params: &mcp.GetPromptParams{Name: p.Name, Arguments: arguments}})
+	if err != nil {
+		return "", err
+	}
+
+	var text strings.Builder
+	for _, message := range result.Messages {
+		if content, ok := message.Content.(*mcp.TextContent); ok {
+			text.WriteString(content.Text)
+		}
+	}
+	return text.String(), nil
 }
 
 func (p Prompt) register(server *mcp.Server) error {

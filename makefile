@@ -302,6 +302,22 @@ mcp-windows: sim/core/proto/api.pb.go mcp-presets
 mcp-test: sim/core/proto/api.pb.go mcp-presets
 	cd $(MCP_DIR) && GOARCH=amd64 go test --tags=with_db ./...
 
+MCP_BUNDLE_DIR := $(MCP_DIR)/dist/mcpb
+
+# Packs a Claude Desktop bundle: a zip carrying the server and a manifest describing it, which
+# installs by being opened. Windows only, because that is where Claude Desktop runs here and a
+# bundle should not carry binaries nobody has run.
+.PHONY: mcp-bundle
+mcp-bundle: mcp-windows
+	cd $(MCP_DIR) && go run --tags=with_db ./cmd/genmanifest
+	rm -rf $(MCP_BUNDLE_DIR) wowsims-tbc.mcpb
+	mkdir -p $(MCP_BUNDLE_DIR)/server
+	cp wowsimmcp.exe $(MCP_BUNDLE_DIR)/server/
+	cp $(MCP_DIR)/mcpb/manifest.json $(MCP_BUNDLE_DIR)/
+	cp assets/favicon_io/android-chrome-512x512.png $(MCP_BUNDLE_DIR)/icon.png
+	cd $(MCP_BUNDLE_DIR) && zip -qr ../../../wowsims-tbc.mcpb .
+	@echo "packed wowsims-tbc.mcpb -- open it with Claude Desktop to install"
+
 # Regenerates mcp/docs/TOOLS.md from the registry. Never edit that file by hand.
 .PHONY: mcp-docs
 mcp-docs: sim/core/proto/api.pb.go

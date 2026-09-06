@@ -1,0 +1,129 @@
+{
+  "manifest_version": "0.3",
+  "name": "wowsims-tbc",
+  "display_name": "WoW TBC Classic simulator",
+  "version": "0.1.0",
+  "description": "Simulate WoW: The Burning Crusade Classic characters: gear, talents, rotations and encounters.",
+  "long_description": "Runs the wowsims TBC Classic simulator locally, with no network access and no\nexternal services: the item database and every checked-in gear set, rotation and talent build are\ncompiled into the binary.\n\nAsk it to simulate a character, compare gear or rotations, work out stat weights, or import a\ncharacter straight out of the game with the WowSimsExporter addon. Results come back with error\nbars, and every setup has a share link you can open on wowsims.com.\n\nSimulations are deterministic: the same question gives the same answer, and long runs happen in\nthe background with a job you can poll or cancel.",
+  "author": {
+    "name": "wowsims",
+    "url": "https://github.com/zmsl/tbc-new"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zmsl/tbc-new"
+  },
+  "license": "MIT",
+  "keywords": [
+    "wow",
+    "tbc",
+    "simulator",
+    "dps",
+    "theorycrafting"
+  ],
+  "icon": "icon.png",
+  "server": {
+    "type": "binary",
+    "entry_point": "server/wowsimmcp.exe",
+    "mcp_config": {
+      "command": "${__dirname}/server/wowsimmcp.exe",
+      "args": []
+    }
+  },
+  "tools": [
+    {
+      "name": "specs_list",
+      "description": "Lists the class specs this simulator can run, with the gear sets, rotations and builds checked in for each."
+    },
+    {
+      "name": "settings_create",
+      "description": "Builds a character setup from checked-in presets and returns a share link for it."
+    },
+    {
+      "name": "link_decode",
+      "description": "Decodes a wowsims share link into a readable summary of the setup it carries."
+    },
+    {
+      "name": "link_encode",
+      "description": "Packs edited settings back into a share link."
+    },
+    {
+      "name": "char_stats",
+      "description": "Reports a character's final stats -- with gear, talents, buffs and consumables applied -- without running a simulation."
+    },
+    {
+      "name": "gear_validate",
+      "description": "Checks that a gear set could actually be worn: slots, unique-equipped items and gems, meta gem colour requirements, enchant applicability and weapon combinations."
+    },
+    {
+      "name": "db_search_items",
+      "description": "Finds items by name, slot, class, phase, quality and stats."
+    },
+    {
+      "name": "import_addon",
+      "description": "Turns a WowSimsExporter addon export into a simulatable setup and a share link."
+    },
+    {
+      "name": "sim_run",
+      "description": "Simulates a setup and reports DPS with its error bars and a per-spell breakdown."
+    },
+    {
+      "name": "sim_stat_weights",
+      "description": "Measures how much DPS each point of each stat is worth for a setup."
+    },
+    {
+      "name": "sim_compare_batch",
+      "description": "Simulates a base setup and a list of variations at one seed, and ranks them by DPS with the error on each difference."
+    },
+    {
+      "name": "job_status",
+      "description": "Reports how far a background simulation has got."
+    },
+    {
+      "name": "job_result",
+      "description": "Returns the result of a completed background simulation."
+    },
+    {
+      "name": "job_cancel",
+      "description": "Cancels a background simulation."
+    },
+    {
+      "name": "job_list",
+      "description": "Lists background simulations and their states."
+    }
+  ],
+  "prompts": [
+    {
+      "name": "find_bis",
+      "description": "A procedure for finding the strongest gear set a spec can assemble by a given raid phase.",
+      "arguments": [
+        "spec",
+        "phase",
+        "encounter"
+      ],
+      "text": "Find the best gear set for the spec available by phase the target phase, fighting LongSingleTarget.\n\nWork like this:\n\n1. Read `wowsims://spec/{class}/{spec}/gear` for the sets already checked in. It says which phase each is for, what distinguishes the ones that share a phase, and whether each can actually be worn -- start from the best wearable one at or below your target phase.\n2. Establish the baseline: `settings_create` with that spec, then `sim_run` on the link. That is the number to beat, and if nothing beats it, say so.\n3. `sim_stat_weights` on the baseline. The weights say what a point of each stat is worth, and they are how candidates get ranked without simulating every one.\n4. For each slot worth changing, `db_search_items` with `maxPhase: the target phase`, the spec's class, and the slot. Score the results with the stat weights and keep the best three to five per slot.\n5. Narrow with `sim_compare_batch`, one slot at a time, starting from the slots where the candidates differ most. Each call compares the current best set against the candidates for one slot; keep the winner and move on. This converges in a few calls per slot rather than combinatorially.\n6. Watch `significant` on every row. When a difference is not significant, the two options are indistinguishable at that iteration count -- either say so and pick on another basis, or re-run the close pair with more iterations.\n7. Before trusting the final set, `gear_validate` it. Unique-equipped items, meta gem colour requirements and enchant restrictions are not enforced by the simulator, and a set that breaks them is not a real answer.\n8. Re-run the finalists at 20000 iterations or more to separate the last few DPS, then report the set, its DPS with the error, the gain over the baseline, and the share link.\n\nState the assumptions you optimised under -- encounter, buffs, talents, rotation -- because a 'best' set is only best for those."
+    },
+    {
+      "name": "best_in_bags",
+      "description": "A procedure for finding the strongest set a character can assemble from gear they already have.",
+      "arguments": [
+        "spec"
+      ],
+      "text": "Work out the best gear the player can put together from what they already own.\n\n1. Ask for their WowSimsExporter export if you do not have it, and for the bags export too if they want items out of their bags considered. Import both with `import_addon`.\n2. `sim_run` the imported set as it stands. That is the baseline, and the number they will compare everything against.\n3. `sim_stat_weights` on the baseline, then score every item in the pool by those weights to decide what is worth simulating. Ignore items that are clearly worse than what is already equipped in that slot.\n4. `sim_compare_batch` the promising swaps, one slot at a time, using the `items` field so only that slot changes. Keep whatever wins and carry it into the next comparison.\n5. `gear_validate` the result: two unique trinkets or a dead meta gem would make the answer wrong in a way the simulation itself will not catch.\n6. Report the upgrade path in order of value -- what to change, what it gains, and what it costs -- and give them the share link so they can open it in the sim.\n\nIf nothing in the pool beats what they are wearing, say that plainly."
+    },
+    {
+      "name": "compare_rotations",
+      "description": "A procedure for deciding whether a change to the rotation is actually an improvement.",
+      "arguments": [
+        "spec",
+        "change"
+      ],
+      "text": "Decide whether this change to the the spec rotation is worth making: the proposed rotation change\n\n1. Read the current rotation from `wowsims://spec/{class}/{spec}/apl/default` and the list of alternatives from `specs_list`.\n2. `sim_compare_batch` the current rotation against the variants, at the same seed. Rotation changes are usually worth a percent or two at most, so the paired seeds matter more here than anywhere else.\n3. Test across conditions, not just one: short and long fights, single and multiple targets, and with buffs and without. A change that wins one scenario and loses another has not earned a default.\n4. Look at the per-spell breakdown in the results, not only the totals. It shows what actually changed -- casts displaced, mana spent, a spell missing more than expected -- which is the difference between knowing a change works and knowing why.\n5. Report the deltas per scenario with their significance, and recommend only if the gain holds across them. Say explicitly when the answer is 'no measurable difference'."
+    }
+  ],
+  "compatibility": {
+    "platforms": [
+      "win32"
+    ]
+  }
+}

@@ -3142,6 +3142,27 @@ enumerating.
 | `phase` | yes | the raid phase whose items are available, 1 to 5 |
 | `encounter` | no | which fight to optimise for: ShortSingleTarget, LongSingleTarget or LongMultiTarget |
 
+<details><summary>Workflow</summary>
+
+```
+Find the best gear set for the spec available by phase the target phase, fighting LongSingleTarget.
+
+Work like this:
+
+1. Read `wowsims://spec/{class}/{spec}/gear` for the sets already checked in. It says which phase each is for, what distinguishes the ones that share a phase, and whether each can actually be worn -- start from the best wearable one at or below your target phase.
+2. Establish the baseline: `settings_create` with that spec, then `sim_run` on the link. That is the number to beat, and if nothing beats it, say so.
+3. `sim_stat_weights` on the baseline. The weights say what a point of each stat is worth, and they are how candidates get ranked without simulating every one.
+4. For each slot worth changing, `db_search_items` with `maxPhase: the target phase`, the spec's class, and the slot. Score the results with the stat weights and keep the best three to five per slot.
+5. Narrow with `sim_compare_batch`, one slot at a time, starting from the slots where the candidates differ most. Each call compares the current best set against the candidates for one slot; keep the winner and move on. This converges in a few calls per slot rather than combinatorially.
+6. Watch `significant` on every row. When a difference is not significant, the two options are indistinguishable at that iteration count -- either say so and pick on another basis, or re-run the close pair with more iterations.
+7. Before trusting the final set, `gear_validate` it. Unique-equipped items, meta gem colour requirements and enchant restrictions are not enforced by the simulator, and a set that breaks them is not a real answer.
+8. Re-run the finalists at 20000 iterations or more to separate the last few DPS, then report the set, its DPS with the error, the gain over the baseline, and the share link.
+
+State the assumptions you optimised under -- encounter, buffs, talents, rotation -- because a 'best' set is only best for those.
+```
+
+</details>
+
 ### `best_in_bags` — Find the best set from what you own
 
 A procedure for finding the strongest set a character can assemble from gear they already have.
@@ -3151,6 +3172,23 @@ Unlike find_bis this is bounded: the pool is what the player owns, which is usua
 | Argument | Required | Description |
 | --- | --- | --- |
 | `spec` | no | which spec to play, if the class has more than one |
+
+<details><summary>Workflow</summary>
+
+```
+Work out the best gear the player can put together from what they already own.
+
+1. Ask for their WowSimsExporter export if you do not have it, and for the bags export too if they want items out of their bags considered. Import both with `import_addon`.
+2. `sim_run` the imported set as it stands. That is the baseline, and the number they will compare everything against.
+3. `sim_stat_weights` on the baseline, then score every item in the pool by those weights to decide what is worth simulating. Ignore items that are clearly worse than what is already equipped in that slot.
+4. `sim_compare_batch` the promising swaps, one slot at a time, using the `items` field so only that slot changes. Keep whatever wins and carry it into the next comparison.
+5. `gear_validate` the result: two unique trinkets or a dead meta gem would make the answer wrong in a way the simulation itself will not catch.
+6. Report the upgrade path in order of value -- what to change, what it gains, and what it costs -- and give them the share link so they can open it in the sim.
+
+If nothing in the pool beats what they are wearing, say that plainly.
+```
+
+</details>
 
 ### `compare_rotations` — Test a rotation change
 
@@ -3162,3 +3200,17 @@ Rotation differences are usually small, so this is mostly about not being fooled
 | --- | --- | --- |
 | `spec` | yes | the spec whose rotation is in question |
 | `change` | no | what to try, e.g. 'add Mind Blast to the priority list' |
+
+<details><summary>Workflow</summary>
+
+```
+Decide whether this change to the the spec rotation is worth making: the proposed rotation change
+
+1. Read the current rotation from `wowsims://spec/{class}/{spec}/apl/default` and the list of alternatives from `specs_list`.
+2. `sim_compare_batch` the current rotation against the variants, at the same seed. Rotation changes are usually worth a percent or two at most, so the paired seeds matter more here than anywhere else.
+3. Test across conditions, not just one: short and long fights, single and multiple targets, and with buffs and without. A change that wins one scenario and loses another has not earned a default.
+4. Look at the per-spell breakdown in the results, not only the totals. It shows what actually changed -- casts displaced, mana spent, a spell missing more than expected -- which is the difference between knowing a change works and knowing why.
+5. Report the deltas per scenario with their significance, and recommend only if the gain holds across them. Say explicitly when the answer is 'no measurable difference'.
+```
+
+</details>

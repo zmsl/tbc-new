@@ -106,6 +106,12 @@ func renderEntry(b *strings.Builder, doc spec.Doc) error {
 		}
 	}
 
+	if doc.Text != "" {
+		b.WriteString("\n<details><summary>Workflow</summary>\n\n```\n")
+		b.WriteString(doc.Text)
+		b.WriteString("\n```\n\n</details>\n")
+	}
+
 	if err := renderSchema(b, "Input", doc.InputSchema); err != nil {
 		return fmt.Errorf("%s: %w", doc.ID, err)
 	}
