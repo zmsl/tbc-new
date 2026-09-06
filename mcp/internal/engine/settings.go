@@ -1,9 +1,10 @@
 package engine
 
 import (
+	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
+	"io/fs"
+	"path"
 	"regexp"
 	"strconv"
 	"strings"
@@ -35,10 +36,17 @@ func (k PresetKind) paths() (dir, suffix string, err error) {
 	return "", "", fmt.Errorf("unknown preset kind %q", k)
 }
 
+// ErrNoPresets is returned when the server has no preset tree at all: none was compiled in and
+// none was found on disk.
+var ErrNoPresets = errors.New("no presets available; pass --presets-root pointing at the repository's ui/")
+
 // ReadPreset returns a preset file's raw bytes. The engine's own loaders (core.GetGearSet and
 // friends) call log.Fatal on a missing file, which is fine for a test binary and fatal for a
 // server, so presets are read here instead.
 func (c Config) ReadPreset(spec proto.Spec, kind PresetKind, name string) ([]byte, error) {
+	if c.Presets == nil {
+		return nil, ErrNoPresets
+	}
 	specDir, ok := SpecDir(spec)
 	if !ok {
 		return nil, fmt.Errorf("no preset directory known for %v", spec)
@@ -47,19 +55,19 @@ func (c Config) ReadPreset(spec proto.Spec, kind PresetKind, name string) ([]byt
 	if err != nil {
 		return nil, err
 	}
-	base := filepath.Join(c.PresetsRoot, specDir, dir)
-	path := filepath.Join(base, name+suffix)
+
 	// Names may be nested -- the hunter keeps its gear sets in per-phase directories -- but must
-	// stay inside the preset directory.
-	if !strings.HasPrefix(path, base+string(filepath.Separator)) {
+	// stay inside the preset directory, which is exactly what fs.ValidPath rejects.
+	file := path.Join(specDir, dir, name+suffix)
+	if !fs.ValidPath(file) || strings.HasPrefix(name, "/") {
 		return nil, fmt.Errorf("preset name %q escapes the preset directory", name)
 	}
 
-	data, err := os.ReadFile(path)
-	if os.IsNotExist(err) {
+	data, err := fs.ReadFile(c.Presets, file)
+	if err != nil {
 		return nil, fmt.Errorf("no %s preset named %q for %v", kind, name, specName(spec))
 	}
-	return data, err
+	return data, nil
 }
 
 // LoadGearSet reads a checked-in gear set.
@@ -124,12 +132,13 @@ func (c Config) ListTalents(spec proto.Spec) ([]TalentPreset, error) {
 		return nil, fmt.Errorf("no preset directory known for %v", spec)
 	}
 
-	data, err := os.ReadFile(filepath.Join(c.PresetsRoot, specDir, "presets.ts"))
-	if os.IsNotExist(err) {
-		return nil, nil
+	if c.Presets == nil {
+		return nil, ErrNoPresets
 	}
+
+	data, err := fs.ReadFile(c.Presets, path.Join(specDir, "presets.ts"))
 	if err != nil {
-		return nil, err
+		return nil, nil
 	}
 	source := string(data)
 

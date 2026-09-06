@@ -15,7 +15,7 @@ func init() {
 }
 
 func testConfig() engine.Config {
-	return engine.Config{PresetsRoot: filepath.Join("..", "..", "..", "ui")}
+	return engine.FileConfig(filepath.Join("..", "..", "..", "ui"))
 }
 
 func specName(spec proto.Spec) string {

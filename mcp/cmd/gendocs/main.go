@@ -23,11 +23,9 @@ func main() {
 
 	sim.RegisterAll()
 
-	// Entries are constructed with a config, but only their declarations are rendered, so the
-	// output does not depend on what is in the presets tree.
-	// The jobs directory is never touched while rendering: only declarations are read.
+	// Only declarations are rendered, so neither the preset tree nor the job directory is read.
 	rendered, err := docs.Render(registry.All(
-		engine.Config{PresetsRoot: filepath.Join("..", "ui")},
+		engine.FileConfig(filepath.Join("..", "ui")),
 		jobs.Store{Dir: filepath.Join(os.TempDir(), "wowsimmcp-docs")},
 	))
 	if err != nil {

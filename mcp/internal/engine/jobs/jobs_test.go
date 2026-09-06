@@ -19,7 +19,7 @@ func init() {
 func testRequest(t *testing.T, iterations int32, seed int64) *proto.RaidSimRequest {
 	t.Helper()
 
-	config := engine.Config{PresetsRoot: filepath.Join("..", "..", "..", "..", "ui")}
+	config := engine.FileConfig(filepath.Join("..", "..", "..", "..", "ui"))
 	settings, _, err := config.BuildSettings(engine.SettingsRequest{
 		Spec:    proto.Spec_SpecSmitePriest,
 		GearSet: "p3",

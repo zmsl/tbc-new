@@ -20,7 +20,7 @@ func init() {
 func render(t *testing.T) string {
 	t.Helper()
 
-	rendered, err := docs.Render(registry.All(engine.Config{PresetsRoot: filepath.Join("..", "..", "..", "ui")}, jobs.Store{Dir: t.TempDir()}))
+	rendered, err := docs.Render(registry.All(engine.FileConfig(filepath.Join("..", "..", "..", "ui")), jobs.Store{Dir: t.TempDir()}))
 	if err != nil {
 		t.Fatalf("render: %v", err)
 	}

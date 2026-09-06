@@ -26,7 +26,7 @@ func testStore(t *testing.T) jobs.Store {
 }
 
 func testConfig() engine.Config {
-	return engine.Config{PresetsRoot: filepath.Join("..", "..", "..", "ui")}
+	return engine.FileConfig(filepath.Join("..", "..", "..", "ui"))
 }
 
 // Connects a client to a server carrying the real registry, the way an agent would.

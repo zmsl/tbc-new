@@ -270,19 +270,36 @@ desktop-dev: $(DESKTOP_DIR)/node_modules wowsimtbc
 MCP_DIR     := mcp
 MCP_LDFLAGS := -X 'main.Version=$(VERSION)' -s -w
 
+MCP_PRESETS := $(MCP_DIR)/internal/presets/files
+
+# The gear sets, rotations, builds and talent presets are compiled into the binary so it needs
+# nothing but itself at runtime. They are copied out of ui/ on every build rather than committed
+# under mcp/: one copy in the repository, and no chance of the two drifting.
+.PHONY: mcp-presets
+mcp-presets:
+	rm -rf $(MCP_PRESETS)
+	mkdir -p $(MCP_PRESETS)
+	touch $(MCP_PRESETS)/.gitkeep
+	cd ui && find . -path './*/*/*' \( -name '*.gear.json' -o -name '*.apl.json' -o -name '*.build.json' \) -print \
+	  -o -path './*/*/presets.ts' -print \
+	  | while read -r f; do \
+	      mkdir -p "../$(MCP_PRESETS)/$$(dirname "$$f")"; \
+	      cp "$$f" "../$(MCP_PRESETS)/$$f"; \
+	    done
+
 # with_db is not optional in practice: without it every item lookup comes back empty.
 .PHONY: mcp
-mcp: sim/core/proto/api.pb.go
+mcp: sim/core/proto/api.pb.go mcp-presets
 	cd $(MCP_DIR) && go build --tags=with_db -o ../wowsimmcp -ldflags="$(MCP_LDFLAGS)" .
 
 # Claude Desktop runs on Windows and macOS, and cannot execute a Linux binary sitting in WSL
 # without going through wsl.exe. Building the .exe removes that hop.
 .PHONY: mcp-windows
-mcp-windows: sim/core/proto/api.pb.go
+mcp-windows: sim/core/proto/api.pb.go mcp-presets
 	cd $(MCP_DIR) && GOOS=windows GOARCH=amd64 GOAMD64=v2 go build --tags=with_db -o ../wowsimmcp.exe -ldflags="$(MCP_LDFLAGS)" .
 
 .PHONY: mcp-test
-mcp-test: sim/core/proto/api.pb.go
+mcp-test: sim/core/proto/api.pb.go mcp-presets
 	cd $(MCP_DIR) && GOARCH=amd64 go test --tags=with_db ./...
 
 # Regenerates mcp/docs/TOOLS.md from the registry. Never edit that file by hand.

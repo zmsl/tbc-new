@@ -13,7 +13,6 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -21,6 +20,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/wowsims/tbc/mcp/internal/engine"
 	"github.com/wowsims/tbc/mcp/internal/engine/jobs"
+	"github.com/wowsims/tbc/mcp/internal/presets"
 	"github.com/wowsims/tbc/mcp/internal/registry"
 	"github.com/wowsims/tbc/mcp/internal/spec"
 	"github.com/wowsims/tbc/sim"
@@ -31,15 +31,10 @@ import (
 var Version = "development"
 
 func main() {
-	presetsRoot := flag.String("presets-root", "", "directory holding the checked-in presets (the repo's ui/). Defaults to $WOWSIMS_PRESETS_ROOT, then ./ui, then the ui/ beside the binary.")
+	presetsRoot := flag.String("presets-root", "", "directory holding the checked-in presets (the repo's ui/). Defaults to $WOWSIMS_PRESETS_ROOT, then the copy built into this binary, then a ui/ beside it.")
 	jobsDir := flag.String("jobs-dir", "", "directory holding background simulation records. Defaults to $WOWSIMS_JOBS_DIR, then the user cache directory.")
 	jobTTL := flag.Duration("jobs-ttl", jobs.DefaultTTL, "how long finished simulations stay readable")
 	flag.Parse()
-
-	root, err := resolvePresetsRoot(*presetsRoot)
-	if err != nil {
-		log.Fatalf("wowsimmcp: %v", err)
-	}
 
 	// Registers every spec's agent factory. Without it the engine cannot build a player for any
 	// spec, and nothing simulates.
@@ -58,7 +53,8 @@ func main() {
 		log.Printf("wowsimmcp: could not prune old job records: %v", err)
 	}
 
-	config := engine.Config{PresetsRoot: root}
+	config := resolvePresets(*presetsRoot)
+	log.Printf("wowsimmcp: presets from %s", config.PresetsSource)
 
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "wowsims-tbc",
@@ -90,12 +86,20 @@ func resolveJobsDir(flagValue string) string {
 	return filepath.Join(os.TempDir(), "wowsimmcp", "jobs")
 }
 
-// The presets are files in the repo rather than data compiled into the binary, so the server has
-// to be told where they are. Checking the obvious places keeps the common cases -- running from
-// the repo, or from a build directory beside it -- working with no flag at all.
-func resolvePresetsRoot(flagValue string) (string, error) {
-	candidates := []string{flagValue, os.Getenv("WOWSIMS_PRESETS_ROOT")}
+// Presets come from one of three places, in order of how much the operator asked for them:
+// an explicit flag, the tree compiled into this binary, or a checkout sitting next to it. A
+// binary with none still runs -- share links carry their own settings, so simulating a link
+// works -- but nothing that reads a preset by name will.
+func resolvePresets(flagValue string) engine.Config {
+	if root := firstExistingDir(flagValue, os.Getenv("WOWSIMS_PRESETS_ROOT")); root != "" {
+		return engine.FileConfig(root)
+	}
 
+	if embedded := presets.FS(); embedded != nil {
+		return engine.Config{Presets: embedded, PresetsSource: "the copy built into this binary"}
+	}
+
+	var candidates []string
 	if cwd, err := os.Getwd(); err == nil {
 		candidates = append(candidates, filepath.Join(cwd, "ui"), filepath.Join(cwd, "..", "ui"))
 	}
@@ -103,15 +107,22 @@ func resolvePresetsRoot(flagValue string) (string, error) {
 		exeDir := filepath.Dir(exe)
 		candidates = append(candidates, filepath.Join(exeDir, "ui"), filepath.Join(exeDir, "..", "ui"))
 	}
+	if root := firstExistingDir(candidates...); root != "" {
+		return engine.FileConfig(root)
+	}
 
+	log.Print("wowsimmcp: no presets found; gear sets, rotations and builds will be unavailable (pass --presets-root, or build with `make mcp`)")
+	return engine.Config{PresetsSource: "none"}
+}
+
+func firstExistingDir(candidates ...string) string {
 	for _, candidate := range candidates {
 		if candidate == "" {
 			continue
 		}
 		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
-			return filepath.Clean(candidate), nil
+			return filepath.Clean(candidate)
 		}
 	}
-
-	return "", fmt.Errorf("cannot find the presets directory; pass --presets-root pointing at the repo's ui/")
+	return ""
 }

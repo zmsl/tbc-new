@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"path/filepath"
+	"path"
 	"slices"
 	"strings"
 
@@ -16,11 +16,22 @@ import (
 // Config is the server's runtime configuration. It is passed in rather than read from globals so
 // handlers can be exercised against a fixture tree in tests.
 type Config struct {
-	// PresetsRoot is the ui/ directory holding gear sets, rotations and builds.
-	PresetsRoot string
+	// Presets holds the checked-in gear sets, rotations, builds and presets.ts files, laid out as
+	// they are under the repository's ui/. It is an fs.FS rather than a path so the same code
+	// serves a directory on disk and the tree compiled into the binary.
+	Presets fs.FS
+
+	// PresetsSource says where Presets came from, for diagnostics.
+	PresetsSource string
 
 	// SiteURL is the base the share links point at. Defaults to DefaultSiteURL.
 	SiteURL string
+}
+
+// FileConfig reads presets from a directory, which is what a server running beside a checkout
+// does.
+func FileConfig(root string) Config {
+	return Config{Presets: os.DirFS(root), PresetsSource: root}
 }
 
 // specDirs maps each spec to its directory under the presets root.
@@ -105,11 +116,15 @@ func (c Config) ListPresets(spec proto.Spec) (Presets, error) {
 		return Presets{}, fmt.Errorf("no preset directory known for %v", spec)
 	}
 
+	if c.Presets == nil {
+		return Presets{}, ErrNoPresets
+	}
+
 	var presets Presets
 	targets := []*[]string{&presets.GearSets, &presets.Rotations, &presets.Builds}
 
 	for i, kind := range presetKinds {
-		names, err := listPresetNames(filepath.Join(c.PresetsRoot, dir, kind.dir), kind.suffix)
+		names, err := listPresetNames(c.Presets, path.Join(dir, kind.dir), kind.suffix)
 		if err != nil {
 			return Presets{}, err
 		}
@@ -121,24 +136,22 @@ func (c Config) ListPresets(spec proto.Spec) (Presets, error) {
 
 // Walks rather than lists: the hunter keeps its gear sets in per-phase subdirectories, so a
 // preset name can be "phase_3/bm" as well as "p3".
-func listPresetNames(dir, suffix string) ([]string, error) {
-	if _, err := os.Stat(dir); os.IsNotExist(err) {
+func listPresetNames(tree fs.FS, dir, suffix string) ([]string, error) {
+	if _, err := fs.Stat(tree, dir); err != nil {
+		// A spec with no directory of this kind is normal: several ship no builds at all.
 		return nil, nil
 	}
 
 	var names []string
-	err := filepath.WalkDir(dir, func(path string, entry fs.DirEntry, err error) error {
+	err := fs.WalkDir(tree, dir, func(entryPath string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), suffix) {
 			return nil
 		}
-		relative, err := filepath.Rel(dir, path)
-		if err != nil {
-			return err
-		}
-		names = append(names, filepath.ToSlash(strings.TrimSuffix(relative, suffix)))
+		relative := strings.TrimPrefix(strings.TrimPrefix(entryPath, dir), "/")
+		names = append(names, strings.TrimSuffix(relative, suffix))
 		return nil
 	})
 	if err != nil {
