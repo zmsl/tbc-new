@@ -59,10 +59,10 @@ clean:
 	  desktop-dist \
 	  desktop/build \
 	  desktop/node_modules \
+	  mcp/dist \
 	  wowsimmcp \
 	  wowsimmcp.exe \
-	  wowsims-tbc.mcpb \
-	  mcp/dist
+	  wowsims-tbc.mcpb
 	find . -name "*.results.tmp" -type f -delete
 # The presets are copied out of ui/ by mcp-presets, so they are build output like the rest.
 # The glob leaves .gitkeep alone -- it does not match dotfiles -- which matters because that
@@ -280,6 +280,12 @@ MCP_LDFLAGS := -X 'main.Version=$(VERSION)' -s -w
 
 MCP_PRESETS := $(MCP_DIR)/internal/presets/files
 
+# Everything these targets produce goes here rather than the repository root, so a built tree
+# stays tidy and `rm -rf mcp/dist` is the whole cleanup. The root binaries the other targets
+# write (wowsimtbc and friends) are upstream's convention and the release workflow's contract,
+# so they are left where they are.
+MCP_OUT := $(MCP_DIR)/dist
+
 # The gear sets, rotations, builds and talent presets are compiled into the binary so it needs
 # nothing but itself at runtime. They are copied out of ui/ on every build rather than committed
 # under mcp/: one copy in the repository, and no chance of the two drifting.
@@ -298,19 +304,24 @@ mcp-presets:
 # with_db is not optional in practice: without it every item lookup comes back empty.
 .PHONY: mcp
 mcp: sim/core/proto/api.pb.go mcp-presets
-	cd $(MCP_DIR) && go build --tags=with_db -o ../wowsimmcp -ldflags="$(MCP_LDFLAGS)" .
+	mkdir -p $(MCP_OUT)
+	cd $(MCP_DIR) && go build --tags=with_db -o dist/wowsimmcp -ldflags="$(MCP_LDFLAGS)" .
+	@echo "built $(MCP_OUT)/wowsimmcp"
 
 # Claude Desktop runs on Windows and macOS, and cannot execute a Linux binary sitting in WSL
 # without going through wsl.exe. Building the .exe removes that hop.
 .PHONY: mcp-windows
 mcp-windows: sim/core/proto/api.pb.go mcp-presets
-	cd $(MCP_DIR) && GOOS=windows GOARCH=amd64 GOAMD64=v2 go build --tags=with_db -o ../wowsimmcp.exe -ldflags="$(MCP_LDFLAGS)" .
+	mkdir -p $(MCP_OUT)
+	cd $(MCP_DIR) && GOOS=windows GOARCH=amd64 GOAMD64=v2 go build --tags=with_db -o dist/wowsimmcp.exe -ldflags="$(MCP_LDFLAGS)" .
+	@echo "built $(MCP_OUT)/wowsimmcp.exe"
 
 .PHONY: mcp-test
 mcp-test: sim/core/proto/api.pb.go mcp-presets
 	cd $(MCP_DIR) && GOARCH=amd64 go test --tags=with_db ./...
 
-MCP_BUNDLE_DIR := $(MCP_DIR)/dist/mcpb
+MCP_BUNDLE_DIR := $(MCP_OUT)/mcpb
+MCP_BUNDLE    := $(MCP_OUT)/wowsims-tbc.mcpb
 
 # Packs a Claude Desktop bundle: a zip carrying the server and a manifest describing it, which
 # installs by being opened. Windows only, because that is where Claude Desktop runs here and a
@@ -318,13 +329,13 @@ MCP_BUNDLE_DIR := $(MCP_DIR)/dist/mcpb
 .PHONY: mcp-bundle
 mcp-bundle: mcp-windows
 	cd $(MCP_DIR) && go run --tags=with_db ./cmd/genmanifest
-	rm -rf $(MCP_BUNDLE_DIR) wowsims-tbc.mcpb
+	rm -rf $(MCP_BUNDLE_DIR) $(MCP_BUNDLE)
 	mkdir -p $(MCP_BUNDLE_DIR)/server
-	cp wowsimmcp.exe $(MCP_BUNDLE_DIR)/server/
+	cp $(MCP_OUT)/wowsimmcp.exe $(MCP_BUNDLE_DIR)/server/
 	cp $(MCP_DIR)/mcpb/manifest.json $(MCP_BUNDLE_DIR)/
 	cp assets/favicon_io/android-chrome-512x512.png $(MCP_BUNDLE_DIR)/icon.png
-	cd $(MCP_BUNDLE_DIR) && zip -qr ../../../wowsims-tbc.mcpb .
-	@echo "packed wowsims-tbc.mcpb -- open it with Claude Desktop to install"
+	cd $(MCP_BUNDLE_DIR) && zip -qr ../wowsims-tbc.mcpb .
+	@echo "packed $(MCP_BUNDLE) -- open it with Claude Desktop to install"
 
 # Regenerates mcp/docs/TOOLS.md from the registry. Never edit that file by hand.
 .PHONY: mcp-docs
