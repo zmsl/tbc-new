@@ -43,3 +43,4 @@ See [desktop/README.md](desktop/README.md) for how it is built.
 - [Development Commands](docs/commands.md)
 - [Adding a New Sim](docs/adding_sim.md)
 - [Internationalization](docs/i18n_guide.md)
+- [Sim Performance](docs/performance.md)
