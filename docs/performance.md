@@ -81,15 +81,28 @@ Both were measured rather than assumed, and both were rejected. They are recorde
 next person does not spend the afternoon finding out again.
 
 **Profile-guided optimization: no effect.** A merged profile across all five benchmarked specs
-(`make perf-profile`), fed back through `go test -pgo`, moved feral cat by 1.4% and rogue by 1.7%
--- neither statistically significant (p=0.94 and p=0.18 over six runs). PGO's main lever is
-devirtualizing indirect calls with a dominant callee, and this hot loop is the opposite case:
-`APLValue` has dozens of implementations and the call sites see many of them. There is no
-`default.pgo` in the repository, deliberately.
+(`make perf-profile`), fed back through `go test -pgo`, produced no significant change.
 
-**`GOAMD64=v3`: slower.** Rogue regressed **6.4%** (p=0.004); feral cat showed no change. The
-makefile pins `v2` and should stay there. Nothing in the hot loop vectorizes, so AVX2 buys
-nothing, and the larger code it generates costs instruction cache.
+The mechanism is the more convincing evidence, and it predicts this. PGO's main lever on code
+like ours is devirtualization: where a profile shows one concrete type dominating an interface
+call site, the compiler emits a type check plus a direct, inlinable call and falls back to the
+indirect call otherwise. That needs a *dominant* callee. `APLValue` has dozens of implementations
+and the hot call sites -- `lhs.GetFloat`, `val.GetBool` -- genuinely see many of them, so there
+is no majority type to bet on. There is no `default.pgo` in the repository, deliberately.
+
+**`GOAMD64=v3`: no difference, and the first measurement of it was wrong.** Six runs put rogue
+6.4% slower at p=0.004, which looked conclusive. It was not: twelve runs under matched conditions
+put the same comparison at **p=0.84**, and disassembly settles it -- `go tool objdump` gives
+byte-identical mnemonics for every hot function under v2 and v3, differing only in branch target
+addresses, and there is not a single AVX instruction anywhere in the APL value code. There is
+nothing in this workload to vectorize, so v3 has nothing to do; the apparent regression was code
+laid out at different addresses, which is a well-known way to move a benchmark by several percent
+without changing an instruction. The makefile stays on `v2` because v3 buys nothing, not because
+it costs anything.
+
+For the record, the full golden-file suite also passes under `GOAMD64=v3` with zero diffs, so the
+concern that a wider instruction set might fuse a multiply-add and shift results does not apply
+here -- Go emits no FMA in this code either way.
 
 **GC tuning: nothing to tune.** Garbage collection does not appear anywhere in the top of the
 event-loop profile. It shows up only in profiles dominated by environment construction, which is

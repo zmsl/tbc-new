@@ -53,6 +53,20 @@ The equivalence check exists for the narrower case where evaluation order legiti
 and the golden files therefore have to be re-baselined; it is what tells you the re-baseline is
 noise rather than a regression.
 
+## A limit worth knowing
+
+`capture.sh` snapshots one build at a time, so comparing two snapshots compares two runs taken
+minutes apart. That is fine for the size of change this harness exists to find, and unreliable
+below roughly 10%: identical code laid out at different addresses lands differently in the
+instruction cache and the branch predictor, and a machine's thermal state drifts. A `GOAMD64=v3`
+build measured this way looked 6.4% slower at `p=0.004` over six runs; twelve runs under matched
+conditions put the same comparison at `p=0.84`, and disassembly confirmed v3 emits byte-identical
+code for every hot function.
+
+So: treat anything under ~10% from two separate snapshots as unproven. To settle a small effect,
+run both builds back to back in one sitting with `-count 12` or more, and read the p-value rather
+than the percentage.
+
 ## Profiling
 
 ```sh
