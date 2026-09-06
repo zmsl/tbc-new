@@ -16,6 +16,12 @@ import (
 func Entries(config engine.Config) []spec.Entry {
 	return []spec.Entry{
 		specsList(config),
+		settingsCreate(config),
+		linkDecode(),
+		linkEncode(config),
+		charStats(config),
+		gearValidate(config),
+		itemSearch(),
 	}
 }
 
@@ -81,29 +87,8 @@ func specName(s proto.Spec) string {
 }
 
 func className(s proto.Spec) string {
-	if class, ok := specClasses[s]; ok {
+	if class := engine.SpecClass(s); class != proto.Class_ClassUnknown {
 		return class.String()[len("Class"):]
 	}
 	return ""
-}
-
-var specClasses = map[proto.Spec]proto.Class{
-	proto.Spec_SpecBalanceDruid:       proto.Class_ClassDruid,
-	proto.Spec_SpecFeralCatDruid:      proto.Class_ClassDruid,
-	proto.Spec_SpecFeralBearDruid:     proto.Class_ClassDruid,
-	proto.Spec_SpecRestorationDruid:   proto.Class_ClassDruid,
-	proto.Spec_SpecHunter:             proto.Class_ClassHunter,
-	proto.Spec_SpecMage:               proto.Class_ClassMage,
-	proto.Spec_SpecHolyPaladin:        proto.Class_ClassPaladin,
-	proto.Spec_SpecProtectionPaladin:  proto.Class_ClassPaladin,
-	proto.Spec_SpecRetributionPaladin: proto.Class_ClassPaladin,
-	proto.Spec_SpecPriest:             proto.Class_ClassPriest,
-	proto.Spec_SpecSmitePriest:        proto.Class_ClassPriest,
-	proto.Spec_SpecRogue:              proto.Class_ClassRogue,
-	proto.Spec_SpecElementalShaman:    proto.Class_ClassShaman,
-	proto.Spec_SpecEnhancementShaman:  proto.Class_ClassShaman,
-	proto.Spec_SpecRestorationShaman:  proto.Class_ClassShaman,
-	proto.Spec_SpecWarlock:            proto.Class_ClassWarlock,
-	proto.Spec_SpecDpsWarrior:         proto.Class_ClassWarrior,
-	proto.Spec_SpecProtectionWarrior:  proto.Class_ClassWarrior,
 }

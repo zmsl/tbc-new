@@ -4,6 +4,7 @@ package engine
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -17,6 +18,9 @@ import (
 type Config struct {
 	// PresetsRoot is the ui/ directory holding gear sets, rotations and builds.
 	PresetsRoot string
+
+	// SiteURL is the base the share links point at. Defaults to DefaultSiteURL.
+	SiteURL string
 }
 
 // specDirs maps each spec to its directory under the presets root.
@@ -115,21 +119,78 @@ func (c Config) ListPresets(spec proto.Spec) (Presets, error) {
 	return presets, nil
 }
 
+// Walks rather than lists: the hunter keeps its gear sets in per-phase subdirectories, so a
+// preset name can be "phase_3/bm" as well as "p3".
 func listPresetNames(dir, suffix string) ([]string, error) {
-	files, err := os.ReadDir(dir)
-	if os.IsNotExist(err) {
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
 		return nil, nil
 	}
+
+	var names []string
+	err := filepath.WalkDir(dir, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), suffix) {
+			return nil
+		}
+		relative, err := filepath.Rel(dir, path)
+		if err != nil {
+			return err
+		}
+		names = append(names, filepath.ToSlash(strings.TrimSuffix(relative, suffix)))
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	var names []string
-	for _, file := range files {
-		if !file.IsDir() && strings.HasSuffix(file.Name(), suffix) {
-			names = append(names, strings.TrimSuffix(file.Name(), suffix))
-		}
-	}
 	slices.Sort(names)
 	return names, nil
+}
+
+// SpecClass returns the class a spec belongs to, or ClassUnknown.
+func SpecClass(spec proto.Spec) proto.Class {
+	return specClasses[spec]
+}
+
+var specClasses = map[proto.Spec]proto.Class{
+	proto.Spec_SpecBalanceDruid:       proto.Class_ClassDruid,
+	proto.Spec_SpecFeralCatDruid:      proto.Class_ClassDruid,
+	proto.Spec_SpecFeralBearDruid:     proto.Class_ClassDruid,
+	proto.Spec_SpecRestorationDruid:   proto.Class_ClassDruid,
+	proto.Spec_SpecHunter:             proto.Class_ClassHunter,
+	proto.Spec_SpecMage:               proto.Class_ClassMage,
+	proto.Spec_SpecHolyPaladin:        proto.Class_ClassPaladin,
+	proto.Spec_SpecProtectionPaladin:  proto.Class_ClassPaladin,
+	proto.Spec_SpecRetributionPaladin: proto.Class_ClassPaladin,
+	proto.Spec_SpecPriest:             proto.Class_ClassPriest,
+	proto.Spec_SpecSmitePriest:        proto.Class_ClassPriest,
+	proto.Spec_SpecRogue:              proto.Class_ClassRogue,
+	proto.Spec_SpecElementalShaman:    proto.Class_ClassShaman,
+	proto.Spec_SpecEnhancementShaman:  proto.Class_ClassShaman,
+	proto.Spec_SpecRestorationShaman:  proto.Class_ClassShaman,
+	proto.Spec_SpecWarlock:            proto.Class_ClassWarlock,
+	proto.Spec_SpecDpsWarrior:         proto.Class_ClassWarrior,
+	proto.Spec_SpecProtectionWarrior:  proto.Class_ClassWarrior,
+}
+
+// DefaultSiteURL is where a share link should open. The desktop app serves the same pages from
+// its own scheme, but a link handed to a user has to work in a browser.
+const DefaultSiteURL = "https://wowsims.com/tbc/"
+
+// SpecPageURL is the sim page for a spec, which is what a share link is hung off.
+func (c Config) SpecPageURL(spec proto.Spec) (string, error) {
+	dir, ok := SpecDir(spec)
+	if !ok {
+		return "", fmt.Errorf("no sim page known for %v", spec)
+	}
+	site := c.SiteURL
+	if site == "" {
+		site = DefaultSiteURL
+	}
+	if !strings.HasSuffix(site, "/") {
+		site += "/"
+	}
+	return site + dir + "/", nil
 }

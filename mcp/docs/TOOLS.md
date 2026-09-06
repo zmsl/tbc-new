@@ -120,9 +120,1189 @@ Read-only.
 
 </details>
 
+### `settings_create` — Assemble a setup
+
+Builds a character setup from checked-in presets and returns a share link for it.
+
+The link is the unit of state here: it carries the whole setup, so pass it to the other
+tools instead of repeating the same arguments, and hand it to a person to open in the sim.
+Every field except the spec has a default, and `notes` says which defaults were used.
+
+Examples:
+- the smite priest's phase 3 setup: {"spec": "SmitePriest", "gearSet": "p3"}
+- unbuffed, on a short fight: {"spec": "SmitePriest", "encounter": "ShortSingleTarget", "noBuffs": true}
+
+Read-only.
+
+<details><summary>Input schema</summary>
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "link": {
+      "type": "string",
+      "description": "a wowsims share link. Takes precedence over every other field here."
+    },
+    "spec": {
+      "type": "string",
+      "description": "spec to build from presets, e.g. SmitePriest or priest/smite. Required unless link is given."
+    },
+    "build": {
+      "type": "string",
+      "description": "name of a checked-in build preset, which supplies gear, talents, rotation and encounter at once"
+    },
+    "gearSet": {
+      "type": "string",
+      "description": "name of a checked-in gear set. Defaults to the highest-numbered phase set."
+    },
+    "rotation": {
+      "type": "string",
+      "description": "name of a checked-in APL rotation. Defaults to 'default' where it exists, otherwise the first one."
+    },
+    "talents": {
+      "type": "string",
+      "description": "talent string in wowhead format. Defaults to the spec's first checked-in talent preset."
+    },
+    "race": {
+      "type": "string",
+      "description": "race name, e.g. Undead. Defaults to a race the class can be."
+    },
+    "encounter": {
+      "type": "string",
+      "description": "ShortSingleTarget (60s), LongSingleTarget (180s, the default) or LongMultiTarget (180s, 20 enemies)"
+    },
+    "noBuffs": {
+      "type": "boolean",
+      "description": "strip raid buffs, party buffs and debuffs. Use to measure a spec alone rather than in a raid."
+    }
+  },
+  "additionalProperties": false
+}
+```
+
+</details>
+
+<details><summary>Output schema</summary>
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "link": {
+      "type": "string",
+      "description": "share link for this setup; open it in a browser or pass it to another tool"
+    },
+    "summary": {
+      "type": "object",
+      "properties": {
+        "spec": {
+          "type": "string",
+          "description": "the spec being simulated, e.g. SmitePriest"
+        },
+        "class": {
+          "type": "string",
+          "description": "the class, e.g. Priest"
+        },
+        "race": {
+          "type": "string",
+          "description": "the character's race"
+        },
+        "talents": {
+          "type": "string",
+          "description": "talent string in wowhead format"
+        },
+        "professions": {
+          "type": [
+            "null",
+            "array"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "description": "professions, which gate some gear and consumables"
+        },
+        "encounter": {
+          "type": "object",
+          "properties": {
+            "durationSeconds": {
+              "type": "number",
+              "description": "fight length in seconds"
+            },
+            "targets": {
+              "type": "integer",
+              "description": "number of enemies"
+            }
+          },
+          "description": "what is being fought and for how long",
+          "required": [
+            "durationSeconds",
+            "targets"
+          ],
+          "additionalProperties": false
+        },
+        "buffed": {
+          "type": "boolean",
+          "description": "true when raid buffs and debuffs are applied"
+        },
+        "gear": {
+          "type": [
+            "null",
+            "array"
+          ],
+          "items": {
+            "type": "object",
+            "properties": {
+              "slot": {
+                "type": "string",
+                "description": "equipment slot, e.g. Head or MainHand"
+              },
+              "itemId": {
+                "type": "integer",
+                "description": "the item's id",
+                "minimum": -2147483648,
+                "maximum": 2147483647
+              },
+              "name": {
+                "type": "string",
+                "description": "the item's name, when the item database is loaded"
+              },
+              "enchant": {
+                "type": "integer",
+                "description": "enchant effect id, if enchanted",
+                "minimum": -2147483648,
+                "maximum": 2147483647
+              },
+              "gems": {
+                "type": [
+                  "null",
+                  "array"
+                ],
+                "items": {
+                  "type": "integer",
+                  "minimum": -2147483648,
+                  "maximum": 2147483647
+                },
+                "description": "socketed gem ids"
+              }
+            },
+            "required": [
+              "slot",
+              "itemId"
+            ],
+            "additionalProperties": false
+          },
+          "description": "equipped items, one entry per filled slot"
+        }
+      },
+      "description": "what the setup actually contains",
+      "required": [
+        "spec",
+        "encounter",
+        "buffed"
+      ],
+      "additionalProperties": false
+    },
+    "notes": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "string"
+      },
+      "description": "which defaults were applied while assembling it"
+    }
+  },
+  "required": [
+    "link",
+    "summary"
+  ],
+  "additionalProperties": false
+}
+```
+
+</details>
+
+### `link_decode` — Read a share link
+
+Decodes a wowsims share link into a readable summary of the setup it carries.
+
+Use this when a person hands you a link and you need to know what is in it -- gear, talents,
+race, encounter -- before simulating or changing anything.
+
+Examples:
+- summarise a link: {"link": "https://wowsims.com/tbc/priest/smite/#eJys..."}
+
+Read-only.
+
+<details><summary>Input schema</summary>
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "link": {
+      "type": "string",
+      "description": "a wowsims share link, as copied from the sim's export dialog or the browser's address bar"
+    },
+    "includeRaw": {
+      "type": "boolean",
+      "description": "also return the full settings as JSON. Large; only ask for it when you need to edit fields the summary does not cover."
+    }
+  },
+  "required": [
+    "link"
+  ],
+  "additionalProperties": false
+}
+```
+
+</details>
+
+<details><summary>Output schema</summary>
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "summary": {
+      "type": "object",
+      "properties": {
+        "spec": {
+          "type": "string",
+          "description": "the spec being simulated, e.g. SmitePriest"
+        },
+        "class": {
+          "type": "string",
+          "description": "the class, e.g. Priest"
+        },
+        "race": {
+          "type": "string",
+          "description": "the character's race"
+        },
+        "talents": {
+          "type": "string",
+          "description": "talent string in wowhead format"
+        },
+        "professions": {
+          "type": [
+            "null",
+            "array"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "description": "professions, which gate some gear and consumables"
+        },
+        "encounter": {
+          "type": "object",
+          "properties": {
+            "durationSeconds": {
+              "type": "number",
+              "description": "fight length in seconds"
+            },
+            "targets": {
+              "type": "integer",
+              "description": "number of enemies"
+            }
+          },
+          "description": "what is being fought and for how long",
+          "required": [
+            "durationSeconds",
+            "targets"
+          ],
+          "additionalProperties": false
+        },
+        "buffed": {
+          "type": "boolean",
+          "description": "true when raid buffs and debuffs are applied"
+        },
+        "gear": {
+          "type": [
+            "null",
+            "array"
+          ],
+          "items": {
+            "type": "object",
+            "properties": {
+              "slot": {
+                "type": "string",
+                "description": "equipment slot, e.g. Head or MainHand"
+              },
+              "itemId": {
+                "type": "integer",
+                "description": "the item's id",
+                "minimum": -2147483648,
+                "maximum": 2147483647
+              },
+              "name": {
+                "type": "string",
+                "description": "the item's name, when the item database is loaded"
+              },
+              "enchant": {
+                "type": "integer",
+                "description": "enchant effect id, if enchanted",
+                "minimum": -2147483648,
+                "maximum": 2147483647
+              },
+              "gems": {
+                "type": [
+                  "null",
+                  "array"
+                ],
+                "items": {
+                  "type": "integer",
+                  "minimum": -2147483648,
+                  "maximum": 2147483647
+                },
+                "description": "socketed gem ids"
+              }
+            },
+            "required": [
+              "slot",
+              "itemId"
+            ],
+            "additionalProperties": false
+          },
+          "description": "equipped items, one entry per filled slot"
+        }
+      },
+      "description": "what the link contains",
+      "required": [
+        "spec",
+        "encounter",
+        "buffed"
+      ],
+      "additionalProperties": false
+    },
+    "raw": {
+      "type": "string",
+      "description": "the complete IndividualSimSettings as JSON, when includeRaw was set"
+    }
+  },
+  "required": [
+    "summary"
+  ],
+  "additionalProperties": false
+}
+```
+
+</details>
+
+### `link_encode` — Write a share link
+
+Packs edited settings back into a share link.
+
+The counterpart to link_decode: decode a link, change the fields you need, encode it again.
+For setups built from presets, settings_create is easier.
+
+Examples:
+- re-link edited settings: {"settings": "{\"player\":{...},\"encounter\":{...}}"}
+
+Read-only.
+
+<details><summary>Input schema</summary>
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "settings": {
+      "type": "string",
+      "description": "a complete IndividualSimSettings as JSON, e.g. from link_decode with includeRaw set"
+    },
+    "spec": {
+      "type": "string",
+      "description": "which sim page the link should open. Inferred from the settings when omitted."
+    }
+  },
+  "required": [
+    "settings"
+  ],
+  "additionalProperties": false
+}
+```
+
+</details>
+
+<details><summary>Output schema</summary>
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "link": {
+      "type": "string",
+      "description": "the share link"
+    },
+    "summary": {
+      "type": "object",
+      "properties": {
+        "spec": {
+          "type": "string",
+          "description": "the spec being simulated, e.g. SmitePriest"
+        },
+        "class": {
+          "type": "string",
+          "description": "the class, e.g. Priest"
+        },
+        "race": {
+          "type": "string",
+          "description": "the character's race"
+        },
+        "talents": {
+          "type": "string",
+          "description": "talent string in wowhead format"
+        },
+        "professions": {
+          "type": [
+            "null",
+            "array"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "description": "professions, which gate some gear and consumables"
+        },
+        "encounter": {
+          "type": "object",
+          "properties": {
+            "durationSeconds": {
+              "type": "number",
+              "description": "fight length in seconds"
+            },
+            "targets": {
+              "type": "integer",
+              "description": "number of enemies"
+            }
+          },
+          "description": "what is being fought and for how long",
+          "required": [
+            "durationSeconds",
+            "targets"
+          ],
+          "additionalProperties": false
+        },
+        "buffed": {
+          "type": "boolean",
+          "description": "true when raid buffs and debuffs are applied"
+        },
+        "gear": {
+          "type": [
+            "null",
+            "array"
+          ],
+          "items": {
+            "type": "object",
+            "properties": {
+              "slot": {
+                "type": "string",
+                "description": "equipment slot, e.g. Head or MainHand"
+              },
+              "itemId": {
+                "type": "integer",
+                "description": "the item's id",
+                "minimum": -2147483648,
+                "maximum": 2147483647
+              },
+              "name": {
+                "type": "string",
+                "description": "the item's name, when the item database is loaded"
+              },
+              "enchant": {
+                "type": "integer",
+                "description": "enchant effect id, if enchanted",
+                "minimum": -2147483648,
+                "maximum": 2147483647
+              },
+              "gems": {
+                "type": [
+                  "null",
+                  "array"
+                ],
+                "items": {
+                  "type": "integer",
+                  "minimum": -2147483648,
+                  "maximum": 2147483647
+                },
+                "description": "socketed gem ids"
+              }
+            },
+            "required": [
+              "slot",
+              "itemId"
+            ],
+            "additionalProperties": false
+          },
+          "description": "equipped items, one entry per filled slot"
+        }
+      },
+      "description": "what the link contains",
+      "required": [
+        "spec",
+        "encounter",
+        "buffed"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "link",
+    "summary"
+  ],
+  "additionalProperties": false
+}
+```
+
+</details>
+
+### `char_stats` — Compute character stats
+
+Reports a character's final stats -- with gear, talents, buffs and consumables applied -- without running a simulation.
+
+Much cheaper than a sim and enough to answer most gear questions: whether a set reaches the
+spell hit cap, how much mana it has, which set bonuses are active. Reach for a sim only when
+the question is about throughput rather than stats.
+
+Examples:
+- stats for the smite priest's phase 5 set: {"spec": "SmitePriest", "gearSet": "p5"}
+- stats for a setup someone shared: {"link": "https://wowsims.com/tbc/priest/smite/#eJys..."}
+
+Read-only.
+
+<details><summary>Input schema</summary>
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "link": {
+      "type": "string",
+      "description": "a wowsims share link. Takes precedence over every other field here."
+    },
+    "spec": {
+      "type": "string",
+      "description": "spec to build from presets, e.g. SmitePriest or priest/smite. Required unless link is given."
+    },
+    "build": {
+      "type": "string",
+      "description": "name of a checked-in build preset, which supplies gear, talents, rotation and encounter at once"
+    },
+    "gearSet": {
+      "type": "string",
+      "description": "name of a checked-in gear set. Defaults to the highest-numbered phase set."
+    },
+    "rotation": {
+      "type": "string",
+      "description": "name of a checked-in APL rotation. Defaults to 'default' where it exists, otherwise the first one."
+    },
+    "talents": {
+      "type": "string",
+      "description": "talent string in wowhead format. Defaults to the spec's first checked-in talent preset."
+    },
+    "race": {
+      "type": "string",
+      "description": "race name, e.g. Undead. Defaults to a race the class can be."
+    },
+    "encounter": {
+      "type": "string",
+      "description": "ShortSingleTarget (60s), LongSingleTarget (180s, the default) or LongMultiTarget (180s, 20 enemies)"
+    },
+    "noBuffs": {
+      "type": "boolean",
+      "description": "strip raid buffs, party buffs and debuffs. Use to measure a spec alone rather than in a raid."
+    }
+  },
+  "additionalProperties": false
+}
+```
+
+</details>
+
+<details><summary>Output schema</summary>
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "summary": {
+      "type": "object",
+      "properties": {
+        "spec": {
+          "type": "string",
+          "description": "the spec being simulated, e.g. SmitePriest"
+        },
+        "class": {
+          "type": "string",
+          "description": "the class, e.g. Priest"
+        },
+        "race": {
+          "type": "string",
+          "description": "the character's race"
+        },
+        "talents": {
+          "type": "string",
+          "description": "talent string in wowhead format"
+        },
+        "professions": {
+          "type": [
+            "null",
+            "array"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "description": "professions, which gate some gear and consumables"
+        },
+        "encounter": {
+          "type": "object",
+          "properties": {
+            "durationSeconds": {
+              "type": "number",
+              "description": "fight length in seconds"
+            },
+            "targets": {
+              "type": "integer",
+              "description": "number of enemies"
+            }
+          },
+          "description": "what is being fought and for how long",
+          "required": [
+            "durationSeconds",
+            "targets"
+          ],
+          "additionalProperties": false
+        },
+        "buffed": {
+          "type": "boolean",
+          "description": "true when raid buffs and debuffs are applied"
+        },
+        "gear": {
+          "type": [
+            "null",
+            "array"
+          ],
+          "items": {
+            "type": "object",
+            "properties": {
+              "slot": {
+                "type": "string",
+                "description": "equipment slot, e.g. Head or MainHand"
+              },
+              "itemId": {
+                "type": "integer",
+                "description": "the item's id",
+                "minimum": -2147483648,
+                "maximum": 2147483647
+              },
+              "name": {
+                "type": "string",
+                "description": "the item's name, when the item database is loaded"
+              },
+              "enchant": {
+                "type": "integer",
+                "description": "enchant effect id, if enchanted",
+                "minimum": -2147483648,
+                "maximum": 2147483647
+              },
+              "gems": {
+                "type": [
+                  "null",
+                  "array"
+                ],
+                "items": {
+                  "type": "integer",
+                  "minimum": -2147483648,
+                  "maximum": 2147483647
+                },
+                "description": "socketed gem ids"
+              }
+            },
+            "required": [
+              "slot",
+              "itemId"
+            ],
+            "additionalProperties": false
+          },
+          "description": "equipped items, one entry per filled slot"
+        }
+      },
+      "description": "the setup these stats belong to",
+      "required": [
+        "spec",
+        "encounter",
+        "buffed"
+      ],
+      "additionalProperties": false
+    },
+    "stats": {
+      "type": "object",
+      "description": "final stats with buffs, talents and gear applied; zero-valued stats are omitted",
+      "additionalProperties": {
+        "type": "number"
+      }
+    },
+    "sets": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "string"
+      },
+      "description": "item set bonuses currently active"
+    },
+    "link": {
+      "type": "string",
+      "description": "share link for this setup"
+    },
+    "notes": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "string"
+      },
+      "description": "which defaults were applied while assembling the setup"
+    }
+  },
+  "required": [
+    "summary",
+    "stats",
+    "link"
+  ],
+  "additionalProperties": false
+}
+```
+
+</details>
+
+### `gear_validate` — Check gear is wearable
+
+Checks that a gear set could actually be worn: slots, unique-equipped items and gems, meta gem colour requirements, enchant applicability and weapon combinations.
+
+The simulator itself does not enforce any of this -- it will happily sim two of the same
+unique trinket, or a meta gem whose requirement is unmet -- so check gear you assembled
+yourself before trusting its numbers.
+
+Examples:
+- check a checked-in preset: {"spec": "SmitePriest", "gearSet": "p3"}
+
+Read-only.
+
+<details><summary>Input schema</summary>
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "link": {
+      "type": "string",
+      "description": "a wowsims share link. Takes precedence over every other field here."
+    },
+    "spec": {
+      "type": "string",
+      "description": "spec to build from presets, e.g. SmitePriest or priest/smite. Required unless link is given."
+    },
+    "build": {
+      "type": "string",
+      "description": "name of a checked-in build preset, which supplies gear, talents, rotation and encounter at once"
+    },
+    "gearSet": {
+      "type": "string",
+      "description": "name of a checked-in gear set. Defaults to the highest-numbered phase set."
+    },
+    "rotation": {
+      "type": "string",
+      "description": "name of a checked-in APL rotation. Defaults to 'default' where it exists, otherwise the first one."
+    },
+    "talents": {
+      "type": "string",
+      "description": "talent string in wowhead format. Defaults to the spec's first checked-in talent preset."
+    },
+    "race": {
+      "type": "string",
+      "description": "race name, e.g. Undead. Defaults to a race the class can be."
+    },
+    "encounter": {
+      "type": "string",
+      "description": "ShortSingleTarget (60s), LongSingleTarget (180s, the default) or LongMultiTarget (180s, 20 enemies)"
+    },
+    "noBuffs": {
+      "type": "boolean",
+      "description": "strip raid buffs, party buffs and debuffs. Use to measure a spec alone rather than in a raid."
+    }
+  },
+  "additionalProperties": false
+}
+```
+
+</details>
+
+<details><summary>Output schema</summary>
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "equippable": {
+      "type": "boolean",
+      "description": "true when the gear could actually be worn in game"
+    },
+    "problems": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "string"
+      },
+      "description": "one entry per reason the gear could not be worn"
+    },
+    "summary": {
+      "type": "object",
+      "properties": {
+        "spec": {
+          "type": "string",
+          "description": "the spec being simulated, e.g. SmitePriest"
+        },
+        "class": {
+          "type": "string",
+          "description": "the class, e.g. Priest"
+        },
+        "race": {
+          "type": "string",
+          "description": "the character's race"
+        },
+        "talents": {
+          "type": "string",
+          "description": "talent string in wowhead format"
+        },
+        "professions": {
+          "type": [
+            "null",
+            "array"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "description": "professions, which gate some gear and consumables"
+        },
+        "encounter": {
+          "type": "object",
+          "properties": {
+            "durationSeconds": {
+              "type": "number",
+              "description": "fight length in seconds"
+            },
+            "targets": {
+              "type": "integer",
+              "description": "number of enemies"
+            }
+          },
+          "description": "what is being fought and for how long",
+          "required": [
+            "durationSeconds",
+            "targets"
+          ],
+          "additionalProperties": false
+        },
+        "buffed": {
+          "type": "boolean",
+          "description": "true when raid buffs and debuffs are applied"
+        },
+        "gear": {
+          "type": [
+            "null",
+            "array"
+          ],
+          "items": {
+            "type": "object",
+            "properties": {
+              "slot": {
+                "type": "string",
+                "description": "equipment slot, e.g. Head or MainHand"
+              },
+              "itemId": {
+                "type": "integer",
+                "description": "the item's id",
+                "minimum": -2147483648,
+                "maximum": 2147483647
+              },
+              "name": {
+                "type": "string",
+                "description": "the item's name, when the item database is loaded"
+              },
+              "enchant": {
+                "type": "integer",
+                "description": "enchant effect id, if enchanted",
+                "minimum": -2147483648,
+                "maximum": 2147483647
+              },
+              "gems": {
+                "type": [
+                  "null",
+                  "array"
+                ],
+                "items": {
+                  "type": "integer",
+                  "minimum": -2147483648,
+                  "maximum": 2147483647
+                },
+                "description": "socketed gem ids"
+              }
+            },
+            "required": [
+              "slot",
+              "itemId"
+            ],
+            "additionalProperties": false
+          },
+          "description": "equipped items, one entry per filled slot"
+        }
+      },
+      "description": "the setup that was checked",
+      "required": [
+        "spec",
+        "encounter",
+        "buffed"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "equippable",
+    "summary"
+  ],
+  "additionalProperties": false
+}
+```
+
+</details>
+
+### `db_search_items` — Search the item database
+
+Finds items by name, slot, class, phase, quality and stats.
+
+This is the item pool to draw candidates from before simulating anything. Filtering by
+maxPhase is what makes a 'best in phase N' question answerable: the simulator's own item
+records drop phase and quality, so nothing else can filter on them.
+
+Examples:
+- caster helms available by phase 3: {"slot": "Head", "class": "Priest", "maxPhase": 3, "hasStats": ["SpellDamage"]}
+- find a trinket by name: {"name": "Icon of the Silver Crescent"}
+
+Read-only.
+
+<details><summary>Input schema</summary>
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "match items whose name contains this text, case-insensitively"
+    },
+    "slot": {
+      "type": "string",
+      "description": "restrict to items equippable in this slot, e.g. Head, Trinket1, MainHand"
+    },
+    "class": {
+      "type": "string",
+      "description": "restrict to items this class may equip, e.g. Priest"
+    },
+    "maxPhase": {
+      "type": "integer",
+      "description": "only items available by this raid phase (1-5). Use it to answer 'best in phase N' questions.",
+      "minimum": -2147483648,
+      "maximum": 2147483647
+    },
+    "minQuality": {
+      "type": "string",
+      "description": "minimum quality: Common, Uncommon, Rare, Epic or Legendary"
+    },
+    "hasStats": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "string"
+      },
+      "description": "only items carrying all of these stats, e.g. [\"SpellDamage\", \"SpellHitRating\"]"
+    },
+    "limit": {
+      "type": "integer",
+      "description": "how many items to return, 1-200. Defaults to 25."
+    }
+  },
+  "additionalProperties": false
+}
+```
+
+</details>
+
+<details><summary>Output schema</summary>
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "items": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "the item's id, as used in gear sets",
+            "minimum": -2147483648,
+            "maximum": 2147483647
+          },
+          "name": {
+            "type": "string"
+          },
+          "ilvl": {
+            "type": "integer",
+            "description": "item level",
+            "minimum": -2147483648,
+            "maximum": 2147483647
+          },
+          "phase": {
+            "type": "integer",
+            "description": "the raid phase the item becomes available in",
+            "minimum": -2147483648,
+            "maximum": 2147483647
+          },
+          "quality": {
+            "type": "string",
+            "description": "Common, Uncommon, Rare, Epic or Legendary"
+          },
+          "slots": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "slots this item can be equipped in"
+          },
+          "unique": {
+            "type": "boolean",
+            "description": "true when only one may be equipped"
+          },
+          "sockets": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "gem socket colours"
+          },
+          "stats": {
+            "type": "object",
+            "description": "the item's stats; zero-valued stats are omitted",
+            "additionalProperties": {
+              "type": "number"
+            }
+          },
+          "source": {
+            "type": "string",
+            "description": "where the item comes from, when known"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "ilvl",
+          "phase",
+          "quality",
+          "slots"
+        ],
+        "additionalProperties": false
+      },
+      "description": "matching items, most recent phase and highest item level first"
+    },
+    "totalFound": {
+      "type": "integer",
+      "description": "how many items matched before the limit was applied"
+    }
+  },
+  "required": [
+    "items",
+    "totalFound"
+  ],
+  "additionalProperties": false
+}
+```
+
+</details>
+
 ## Resources
 
-No resources yet.
+### `wowsims://spec/{class}/{spec}/gear/{name}` — Gear set
+
+A checked-in gear set: item ids with their enchants and gems, in slot order.
+
+Names come from specs_list. The class and spec segments are the spec's preset path, e.g. priest/smite.
+
+Examples:
+- read one: wowsims://spec/priest/smite/gear/p3
+
+Returns `application/json`.
+
+### `wowsims://spec/{class}/{spec}/apl/{name}` — Rotation
+
+A checked-in APL rotation: the priority list the simulated character follows.
+
+Names come from specs_list. The class and spec segments are the spec's preset path, e.g. priest/smite.
+
+Examples:
+- read one: wowsims://spec/priest/smite/apl/default
+
+Returns `application/json`.
+
+### `wowsims://spec/{class}/{spec}/build/{name}` — Build
+
+A checked-in build: gear, talents, rotation and encounter together, in the same shape a share link carries.
+
+Names come from specs_list. The class and spec segments are the spec's preset path, e.g. priest/smite.
+
+Examples:
+- read one: wowsims://spec/warrior/protection/build/default_encounter_only
+
+Returns `application/json`.
+
+### `wowsims://spec/{class}/{spec}/talents` — Talent builds
+
+The talent builds checked in for a spec, as wowhead-format strings.
+
+These are what settings_create uses when no talents are given. Pass one as `talents` to sim a different build.
+
+Examples:
+- the smite priest's builds: wowsims://spec/priest/smite/talents
+
+Returns `application/json`.
+
+### `wowsims://item/{id}` — Item
+
+One item from the database, by id: stats, sockets, phase, quality and where it drops.
+
+Use db_search_items to find ids; this is for reading one you already have, such as an id out of a gear set.
+
+Examples:
+- Zhar'doom, Greatstaff of the Devourer: wowsims://item/32374
+
+Returns `application/json`.
 
 ## Prompts
 
