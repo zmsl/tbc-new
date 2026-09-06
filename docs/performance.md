@@ -119,6 +119,40 @@ on average *cheaper* than the readiness check, and they fail early far more ofte
 existing order is already the better one. Recorded here because the argument for swapping is
 persuasive and wrong.
 
+## The bytecode VM, and why it lost
+
+The obvious response to "88% is interpreter dispatch" is to stop interpreting a tree. Built as an
+opt-in mode rather than a rewrite: the `APLValue` tree stayed the source of truth, a compiler
+lowered the boolean skeleton of each condition into a flat instruction array with jump-based
+short-circuiting, and unknown node types fell back to an index into a leaf table. That fallback
+is what would have made a *full* VM reachable one opcode at a time, with the tree working at
+every step.
+
+It was **slower, twice**:
+
+| | feral cat | rogue |
+| --- | --- | --- |
+| Flat instruction array, stack machine | **+13.4%** | **+19.8%** |
+| Plus superinstructions for and/or over comparisons | **+24.7%** | **+21.8%** |
+
+Both p=0.000, n=10, same binary, back to back.
+
+The reason is the thing the design was supposed to fix. A tree walk's interface calls look
+expensive, but each *call site* sees a narrow set of concrete types, so the CPU's indirect branch
+predictor handles them well. A bytecode VM replaces that with one `switch` that sees every opcode
+in the program, and a single dispatch site with a mixed opcode history is exactly what an indirect
+predictor is worst at. The standard remedy -- threaded dispatch with computed goto, one dispatch
+site per opcode -- **is not expressible in Go**, which has no computed goto. Superinstructions
+were the fallback remedy, cutting dispatch count rather than cost; they made it worse still,
+because the loop they introduced traded predictable calls for bounds-checked indexing.
+
+The literature that motivated the attempt says switch dispatch beats closure dispatch in an
+interpreter. That is true and irrelevant here: the comparison that mattered was VM against a
+*tree walk with well-predicted call sites*, which is not the same baseline.
+
+Worth stating plainly: this is a case where the profile pointed at a real cost, the diagnosis of
+that cost was correct, and the standard fix for it still does not apply to this language.
+
 ## Why not CUDA
 
 The question comes up because 10,000 iterations sounds like 10,000 independent tasks, which
@@ -174,10 +208,23 @@ interpreter itself:
 | `APLValueOr.GetBool` | 4.2% |
 | `UnitReference.Get` / `AuraReference.Get` | 6.3% combined |
 
-The next real step is memoizing shared subexpressions within a single rotation decision. The
-machinery already exists -- `evalGeneration` (`sim/core/apl.go`) -- but it is wired only to
-variable references. A priority list routinely asks the same question from several entries in
-one pass, and each entry pays for it again.
+That 88% is not what it first looks like. Instrumenting the loop shows the rotation is walked
+**~8,000 times per 180s fight** -- once every 23ms -- and 85-98% of those walks find nothing
+ready. `ReactToEvent` (`sim/core/gcd.go`) calls `DoNextAction` directly on every reacted-to
+event, on top of the scheduled wake-ups, which is how the sim models reacting to a proc within
+reaction time.
+
+Those walks are *not* redundant, which was checked twice:
+
+  - **0.0%** happen at a timestamp already walked with nothing executed in between.
+  - Only **0.7-2.6%** happen while the GCD is blocked, so a cheap "can we act at all?" gate
+    before the walk buys nothing.
+
+The rotation is genuinely being asked "what now?" ~8,000 times, at moments when it could act, and
+the honest answer is usually "nothing yet -- waiting on energy, a cooldown, a proc". There is no
+redundancy left to remove at this layer. Reducing the work means predicting when a condition
+could next become true rather than polling, which is an event-driven redesign, changes results by
+construction, and is far larger than anything attempted so far.
 
 Environment construction is **not** worth chasing, which is worth writing down because it looks
 like it should be. It costs about 1.0ms per `RunSim` -- 0.75ms building the environment, of which
@@ -223,6 +270,35 @@ first.
 
 Stat weights run their sub-sims sequentially, each one internally parallel, so cores stay busy;
 what it costs is one tail per sub-sim rather than one for the whole run.
+
+### Concurrent sims contend for memory, and it is expensive
+
+Everything above measures one sim on one core. Nobody runs it that way -- every real sim splits
+across `GOMAXPROCS` -- and the concurrent number is materially worse:
+
+| | 1 process | 8 processes | penalty |
+| --- | --- | --- | --- |
+| Sim iteration | 3.42ms | 4.44ms | **+30%** |
+| Control (arithmetic, no working set) | 4.21ns | 4.35ns | +3.4% |
+
+The control is what makes this readable. `BenchmarkRnds/Addition` has no working set, so its 3.4%
+is the CPU dropping its all-core turbo bin. Subtracting it leaves **~26% attributable to the
+memory system** -- shared L3 and bandwidth. Each `RunSim` allocates about 1MB, and sixteen of them
+is ~16MB against a 20MB L3.
+
+It is **footprint, not allocation churn**. Re-running the whole experiment with `GOGC=800` -- an
+eight-fold reduction in collection frequency -- moved the penalty from a ratio of 1.30 to 1.31,
+which is to say not at all. That also independently confirms the pooling result above: reducing
+allocation does not help even under the concurrency where its cost would be amplified.
+
+`tools/perf/contention.sh` reproduces this. Expect noise at low process counts -- 4-way has
+measured anywhere from 9% to 13% -- so read the 8-way number, and read the control alongside it.
+
+The open question is whether the resident working set can be reduced at all: `Unit` has 69 fields
+and embeds `PseudoStats`' 63, `Spell` has 54, `Aura` has 47, and the event loop touches a handful
+of each. Hot/cold splitting is the lever, and it is unattempted. It is also exactly the class of
+change -- adding indirection to a hot struct -- that has failed here repeatedly, so it deserves
+the 8-way measurement as its gate rather than the single-core one.
 
 ## The browser
 
