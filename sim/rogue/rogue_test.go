@@ -79,7 +79,14 @@ func benchmarkRequest() *proto.RaidSimRequest {
 				Equipment:     core.GetGearSet("../../ui/rogue/dps/gear_sets", "p1").GearSet,
 				Consumables:   DefaultConsumables,
 				Spec:          DefaultOptions,
-				Rotation:      core.GetAplRotation("../../ui/rogue/dps/apls", "swords").Rotation,
+				// The UI defaults to 100ms (Player.applySharedDefaults) and preset builds carry it.
+				// Leaving it unset lands on the 10ms floor in character.go, which makes the rotation
+				// re-evaluate ten times more often than any real sim does -- and since the rotation is
+				// the most expensive thing in the loop, that inflates its share enormously. An
+				// iteration at 10ms costs about five times one at 100ms, essentially all of it polling
+				// a user never pays for.
+				ReactionTimeMs: 100,
+				Rotation:       core.GetAplRotation("../../ui/rogue/dps/apls", "swords").Rotation,
 			},
 			nil, nil, nil,
 		),

@@ -7,6 +7,41 @@ All numbers below were measured with `tools/perf` on an i9-10850K (16 threads), 
 Go 1.25.4. Reproduce them with `make perf-baseline` and `make perf-profile`; see
 [tools/perf/README.md](../tools/perf/README.md).
 
+## A correction: the first benchmarks measured the wrong workload
+
+Everything below was originally measured with the benchmarks leaving `ReactionTimeMs` unset,
+which lands on the 10ms floor in `character.go`. The UI defaults to **100ms**
+(`Player.applySharedDefaults`) and preset builds carry it, so no real sim runs at 10ms.
+
+The difference is not subtle. Reaction time sets how often the rotation re-evaluates when it
+finds nothing to do, and rotation evaluation is the most expensive thing in the loop, so a
+tenfold increase in polling frequency inflates its share enormously. An iteration measured at
+10ms costs **five times** one measured at 100ms -- 3.41ms against 0.67ms for feral cat -- and
+essentially all of that difference is polling a user never performs.
+
+Two consequences worth stating plainly:
+
+**The headline improvements were smaller than first reported.** Re-measured against the
+pre-optimization commit with both at 100ms:
+
+| Spec | first reported | actual, at 100ms |
+| --- | --- | --- |
+| Feral cat | −25.0% | **−19.1%** |
+| Rogue | −16.6% | **−5.0%** |
+
+Real, bit-exact, and shipped -- but rogue gained about a third of what was claimed.
+
+**The profile shares below are inflated too.** "88% of an iteration inside `DoNextAction`" and
+"~8,000 rotation walks per fight" are properties of a 10ms reaction time. At 100ms both fall by
+roughly an order of magnitude, and the interpreter is a correspondingly smaller share of a real
+sim. The *ordering* of costs within the rotation still holds, and the optimizations that
+targeted them were still worth making; their weight against the rest of the engine was
+overstated.
+
+All five benchmarks now set `ReactionTimeMs: 100` explicitly. The harness was built to stop
+exactly this kind of mistake and shipped with it baked in, which is worth remembering the next
+time a benchmark number looks decisive.
+
 ## The shape of the problem
 
 A single 180-second iteration of the feral cat profile cost **4.63ms** before this work. Building
