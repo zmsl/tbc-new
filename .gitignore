@@ -19,7 +19,7 @@ binary_dist
 sim/web/__debug_bin
 /wowsimcli*
 /wowsimtbc*
-/wowsimmcp
+/wowsimmcp*
 
 # temporary files
 *.results.tmp

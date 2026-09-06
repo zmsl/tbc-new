@@ -275,6 +275,12 @@ MCP_LDFLAGS := -X 'main.Version=$(VERSION)' -s -w
 mcp: sim/core/proto/api.pb.go
 	cd $(MCP_DIR) && go build --tags=with_db -o ../wowsimmcp -ldflags="$(MCP_LDFLAGS)" .
 
+# Claude Desktop runs on Windows and macOS, and cannot execute a Linux binary sitting in WSL
+# without going through wsl.exe. Building the .exe removes that hop.
+.PHONY: mcp-windows
+mcp-windows: sim/core/proto/api.pb.go
+	cd $(MCP_DIR) && GOOS=windows GOARCH=amd64 GOAMD64=v2 go build --tags=with_db -o ../wowsimmcp.exe -ldflags="$(MCP_LDFLAGS)" .
+
 .PHONY: mcp-test
 mcp-test: sim/core/proto/api.pb.go
 	cd $(MCP_DIR) && GOARCH=amd64 go test --tags=with_db ./...
