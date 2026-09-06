@@ -21,6 +21,7 @@ import { WOWHEAD_EXPANSION_ENV } from '../wowhead';
 import { EquippedItem } from './equipped_item.js';
 import { Gear, ItemSwapGear } from './gear.js';
 import { gemEligibleForSocket, gemMatchesSocket } from './gems.js';
+import { readCachedIcon, writeCachedIcon } from './icon_store.js';
 import { getEligibleEnchantSlots, getEligibleItemSlots } from './utils.js';
 
 const dbUrlJson = '/tbc/assets/database/db.json';
@@ -389,10 +390,23 @@ export class Database {
 
 	// Dedupes concurrent lookups for the same id. A request that comes back without an icon is
 	// dropped from the cache so a transient failure isn't remembered as "this id has no icon".
+	//
+	// Behind the in-memory map sits IndexedDB, so an id looked up on one page load is not fetched
+	// again on the next. The persistent key carries the data environment and character level
+	// because those are what the tooltip request is parameterised by -- change either and the
+	// stored answer is for a different question.
 	private static sharedIconRequest(cacheKey: string, makeRequest: () => Promise<IconData>): Promise<IconData> {
 		let request = iconRequestCache.get(cacheKey);
 		if (!request) {
-			request = makeRequest().then(data => {
+			const storageKey = `${WOWHEAD_EXPANSION_ENV}:${CHARACTER_LEVEL}:${cacheKey}`;
+			request = (async () => {
+				const stored = await readCachedIcon(storageKey);
+				if (stored) return stored;
+
+				const data = await makeRequest();
+				writeCachedIcon(storageKey, data);
+				return data;
+			})().then(data => {
 				if (!data.icon) iconRequestCache.delete(cacheKey);
 				return data;
 			});
