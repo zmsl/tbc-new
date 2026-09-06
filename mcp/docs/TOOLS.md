@@ -1247,6 +1247,240 @@ Read-only.
 
 </details>
 
+### `import_addon` — Import a character
+
+Turns a WowSimsExporter addon export into a simulatable setup and a share link.
+
+This is how a real character gets into the simulator: gear, gems, enchants, talents, race and
+professions exactly as they are in game. Pass the resulting link to sim_run or
+sim_compare_batch.
+
+Everything the export does not carry -- buffs, consumables, the encounter -- is filled in with
+the same raid defaults the website uses, and listed in notes.
+
+Examples:
+- import an export: {"export": "{\"class\":\"Priest\",\"race\":\"Undead\",\"talents\":\"...\",\"gear\":{\"items\":[...]}}", "spec": "SmitePriest"}
+
+Read-only.
+
+<details><summary>Input schema</summary>
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "export": {
+      "type": "string",
+      "description": "the JSON the WowSimsExporter addon puts on your clipboard"
+    },
+    "spec": {
+      "type": "string",
+      "description": "which spec to simulate as. Only needed when the class has more than one, e.g. a priest can be Priest (shadow) or SmitePriest."
+    },
+    "bags": {
+      "type": "string",
+      "description": "an optional second export listing items in your bags, as an EquipmentSpec JSON. Returned as a candidate pool to compare against what you are wearing."
+    }
+  },
+  "required": [
+    "export"
+  ],
+  "additionalProperties": false
+}
+```
+
+</details>
+
+<details><summary>Output schema</summary>
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "link": {
+      "type": "string",
+      "description": "share link for the imported character"
+    },
+    "summary": {
+      "type": "object",
+      "properties": {
+        "spec": {
+          "type": "string",
+          "description": "the spec being simulated, e.g. SmitePriest"
+        },
+        "class": {
+          "type": "string",
+          "description": "the class, e.g. Priest"
+        },
+        "race": {
+          "type": "string",
+          "description": "the character's race"
+        },
+        "talents": {
+          "type": "string",
+          "description": "talent string in wowhead format"
+        },
+        "professions": {
+          "type": [
+            "null",
+            "array"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "description": "professions, which gate some gear and consumables"
+        },
+        "encounter": {
+          "type": "object",
+          "properties": {
+            "durationSeconds": {
+              "type": "number",
+              "description": "fight length in seconds"
+            },
+            "targets": {
+              "type": "integer",
+              "description": "number of enemies"
+            }
+          },
+          "description": "what is being fought and for how long",
+          "required": [
+            "durationSeconds",
+            "targets"
+          ],
+          "additionalProperties": false
+        },
+        "buffed": {
+          "type": "boolean",
+          "description": "true when raid buffs and debuffs are applied"
+        },
+        "gear": {
+          "type": [
+            "null",
+            "array"
+          ],
+          "items": {
+            "type": "object",
+            "properties": {
+              "slot": {
+                "type": "string",
+                "description": "equipment slot, e.g. Head or MainHand"
+              },
+              "itemId": {
+                "type": "integer",
+                "description": "the item's id",
+                "minimum": -2147483648,
+                "maximum": 2147483647
+              },
+              "name": {
+                "type": "string",
+                "description": "the item's name, when the item database is loaded"
+              },
+              "enchant": {
+                "type": "integer",
+                "description": "enchant effect id, if enchanted",
+                "minimum": -2147483648,
+                "maximum": 2147483647
+              },
+              "gems": {
+                "type": [
+                  "null",
+                  "array"
+                ],
+                "items": {
+                  "type": "integer",
+                  "minimum": -2147483648,
+                  "maximum": 2147483647
+                },
+                "description": "socketed gem ids"
+              }
+            },
+            "required": [
+              "slot",
+              "itemId"
+            ],
+            "additionalProperties": false
+          },
+          "description": "equipped items, one entry per filled slot"
+        }
+      },
+      "description": "what was imported",
+      "required": [
+        "spec",
+        "encounter",
+        "buffed"
+      ],
+      "additionalProperties": false
+    },
+    "pool": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "object",
+        "properties": {
+          "slot": {
+            "type": "string",
+            "description": "equipment slot, e.g. Head or MainHand"
+          },
+          "itemId": {
+            "type": "integer",
+            "description": "the item's id",
+            "minimum": -2147483648,
+            "maximum": 2147483647
+          },
+          "name": {
+            "type": "string",
+            "description": "the item's name, when the item database is loaded"
+          },
+          "enchant": {
+            "type": "integer",
+            "description": "enchant effect id, if enchanted",
+            "minimum": -2147483648,
+            "maximum": 2147483647
+          },
+          "gems": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "integer",
+              "minimum": -2147483648,
+              "maximum": 2147483647
+            },
+            "description": "socketed gem ids"
+          }
+        },
+        "required": [
+          "slot",
+          "itemId"
+        ],
+        "additionalProperties": false
+      },
+      "description": "items from the bags export, as candidates to try against the equipped set"
+    },
+    "notes": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "string"
+      },
+      "description": "anything that had to be assumed or could not be imported"
+    }
+  },
+  "required": [
+    "link",
+    "summary"
+  ],
+  "additionalProperties": false
+}
+```
+
+</details>
+
 ### `sim_run` — Run a simulation
 
 Simulates a setup and reports DPS with its error bars and a per-spell breakdown.
@@ -1941,6 +2175,293 @@ Read-only.
 
 </details>
 
+### `sim_compare_batch` — Compare setups
+
+Simulates a base setup and a list of variations at one seed, and ranks them by DPS with the error on each difference.
+
+The tool to reach for whenever the question is 'which is better'. Every variant runs against the
+same seed and the same random streams as the base, so the difference between them is far less
+noisy than two separate sim_run calls would be.
+
+Read `significant` before believing a ranking: a difference smaller than the combined error is
+noise, and the answer is either 'no measurable difference' or 'run it again with more
+iterations'. Searching a large space is done by calling this repeatedly on a narrowing set of
+candidates, not by one enormous call -- see the find_bis prompt.
+
+Examples:
+- compare two trinkets: {"spec": "SmitePriest", "gearSet": "p3", "variants": [{"label": "Icon", "items": [{"slot": "Trinket1", "itemId": 29370}]}, {"label": "Skull", "items": [{"slot": "Trinket1", "itemId": 32483}]}]}
+- compare gear sets across phases: {"spec": "SmitePriest", "variants": [{"label": "p3", "gearSet": "p3"}, {"label": "p5", "gearSet": "p5"}]}
+
+Read-only.
+
+<details><summary>Input schema</summary>
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "link": {
+      "type": "string",
+      "description": "a wowsims share link. Takes precedence over every other field here."
+    },
+    "spec": {
+      "type": "string",
+      "description": "spec to build from presets, e.g. SmitePriest or priest/smite. Required unless link is given."
+    },
+    "build": {
+      "type": "string",
+      "description": "name of a checked-in build preset, which supplies gear, talents, rotation and encounter at once"
+    },
+    "gearSet": {
+      "type": "string",
+      "description": "name of a checked-in gear set. Defaults to the highest-numbered phase set."
+    },
+    "rotation": {
+      "type": "string",
+      "description": "name of a checked-in APL rotation. Defaults to 'default' where it exists, otherwise the first one."
+    },
+    "talents": {
+      "type": "string",
+      "description": "talent string in wowhead format. Defaults to the spec's first checked-in talent preset."
+    },
+    "race": {
+      "type": "string",
+      "description": "race name, e.g. Undead. Defaults to a race the class can be."
+    },
+    "encounter": {
+      "type": "string",
+      "description": "ShortSingleTarget (60s), LongSingleTarget (180s, the default) or LongMultiTarget (180s, 20 enemies)"
+    },
+    "noBuffs": {
+      "type": "boolean",
+      "description": "strip raid buffs, party buffs and debuffs. Use to measure a spec alone rather than in a raid."
+    },
+    "variants": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "description": "a short name for this variant, used in the results table"
+          },
+          "link": {
+            "type": "string",
+            "description": "an entirely different setup to compare, as a share link. Everything else in this variant is ignored."
+          },
+          "gearSet": {
+            "type": "string",
+            "description": "swap the whole gear set for a checked-in one"
+          },
+          "rotation": {
+            "type": "string",
+            "description": "swap the rotation for a checked-in one"
+          },
+          "talents": {
+            "type": "string",
+            "description": "swap the talent string"
+          },
+          "encounter": {
+            "type": "string",
+            "description": "fight this encounter instead"
+          },
+          "items": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "object",
+              "properties": {
+                "slot": {
+                  "type": "string",
+                  "description": "the slot to change, e.g. Trinket1 or MainHand"
+                },
+                "itemId": {
+                  "type": "integer",
+                  "description": "the item to equip. Zero empties the slot.",
+                  "minimum": -2147483648,
+                  "maximum": 2147483647
+                },
+                "enchant": {
+                  "type": "integer",
+                  "description": "enchant effect id to apply. Omit to keep the slot's current enchant.",
+                  "minimum": -2147483648,
+                  "maximum": 2147483647
+                },
+                "gems": {
+                  "type": [
+                    "null",
+                    "array"
+                  ],
+                  "items": {
+                    "type": "integer",
+                    "minimum": -2147483648,
+                    "maximum": 2147483647
+                  },
+                  "description": "gem ids to socket. Omit to keep the current gems."
+                }
+              },
+              "required": [
+                "slot",
+                "itemId"
+              ],
+              "additionalProperties": false
+            },
+            "description": "swap individual items, leaving the rest of the gear alone"
+          }
+        },
+        "required": [
+          "label"
+        ],
+        "additionalProperties": false
+      },
+      "description": "the changes to compare against the base setup, at most 40"
+    },
+    "iterations": {
+      "type": "integer",
+      "description": "iterations per variant. Defaults to 2000. Variants times iterations may not exceed 200000.",
+      "minimum": -2147483648,
+      "maximum": 2147483647
+    },
+    "seed": {
+      "type": "integer",
+      "description": "RNG seed, shared by every variant. Defaults to a fixed value."
+    }
+  },
+  "required": [
+    "variants"
+  ],
+  "additionalProperties": false
+}
+```
+
+</details>
+
+<details><summary>Output schema</summary>
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "base": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "dps": {
+          "type": "number"
+        },
+        "stderr": {
+          "type": "number",
+          "description": "standard error of this variant's DPS"
+        },
+        "delta": {
+          "type": "number",
+          "description": "DPS difference from the base setup"
+        },
+        "deltaPercent": {
+          "type": "number",
+          "description": "difference from the base as a percentage"
+        },
+        "significant": {
+          "type": "boolean",
+          "description": "true when the difference is larger than the combined error of both runs. A false here means the variants are indistinguishable at this iteration count, not that they are equal."
+        },
+        "link": {
+          "type": "string",
+          "description": "share link for this variant"
+        },
+        "error": {
+          "type": "string",
+          "description": "why this variant could not be simulated"
+        }
+      },
+      "description": "the unchanged setup, which every variant is measured against",
+      "required": [
+        "label",
+        "dps",
+        "stderr",
+        "significant",
+        "link"
+      ],
+      "additionalProperties": false
+    },
+    "results": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "dps": {
+            "type": "number"
+          },
+          "stderr": {
+            "type": "number",
+            "description": "standard error of this variant's DPS"
+          },
+          "delta": {
+            "type": "number",
+            "description": "DPS difference from the base setup"
+          },
+          "deltaPercent": {
+            "type": "number",
+            "description": "difference from the base as a percentage"
+          },
+          "significant": {
+            "type": "boolean",
+            "description": "true when the difference is larger than the combined error of both runs. A false here means the variants are indistinguishable at this iteration count, not that they are equal."
+          },
+          "link": {
+            "type": "string",
+            "description": "share link for this variant"
+          },
+          "error": {
+            "type": "string",
+            "description": "why this variant could not be simulated"
+          }
+        },
+        "required": [
+          "label",
+          "dps",
+          "stderr",
+          "significant",
+          "link"
+        ],
+        "additionalProperties": false
+      },
+      "description": "one row per variant, best first"
+    },
+    "notes": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "string"
+      },
+      "description": "which defaults were applied to the base setup"
+    }
+  },
+  "required": [
+    "base",
+    "results"
+  ],
+  "additionalProperties": false
+}
+```
+
+</details>
+
 ### `job_status` — Check a running simulation
 
 Reports how far a background simulation has got.
@@ -2591,4 +3112,37 @@ Returns `application/json`.
 
 ## Prompts
 
-No prompts yet.
+### `find_bis` — Find the best gear for a phase
+
+A procedure for finding the strongest gear set a spec can assemble by a given raid phase.
+
+Searching every combination is hopeless -- a handful of candidates in each of sixteen slots is
+already more sets than could be simulated in a lifetime -- so the work is narrowing, not
+enumerating.
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `spec` | yes | the spec to gear up, e.g. SmitePriest |
+| `phase` | yes | the raid phase whose items are available, 1 to 5 |
+| `encounter` | no | which fight to optimise for: ShortSingleTarget, LongSingleTarget or LongMultiTarget |
+
+### `best_in_bags` — Find the best set from what you own
+
+A procedure for finding the strongest set a character can assemble from gear they already have.
+
+Unlike find_bis this is bounded: the pool is what the player owns, which is usually a few dozen items.
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `spec` | no | which spec to play, if the class has more than one |
+
+### `compare_rotations` — Test a rotation change
+
+A procedure for deciding whether a change to the rotation is actually an improvement.
+
+Rotation differences are usually small, so this is mostly about not being fooled by noise.
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `spec` | yes | the spec whose rotation is in question |
+| `change` | no | what to try, e.g. 'add Mind Blast to the priority list' |

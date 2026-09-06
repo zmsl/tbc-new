@@ -1,0 +1,309 @@
+package tools
+
+import (
+	"context"
+	"fmt"
+	"math"
+	"runtime"
+	"slices"
+	"sync"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/wowsims/tbc/mcp/internal/engine"
+	"github.com/wowsims/tbc/mcp/internal/spec"
+	"github.com/wowsims/tbc/sim/core"
+	"github.com/wowsims/tbc/sim/core/proto"
+	googleProto "google.golang.org/protobuf/proto"
+)
+
+const (
+	maxVariants = 40
+	// Variants times iterations. 40 variants at 5000 iterations is a few seconds of wall clock;
+	// beyond that a client is waiting long enough that the run belongs in several calls.
+	maxComparisonIterations = 200_000
+)
+
+type comparisonVariant struct {
+	Label string `json:"label" jsonschema:"a short name for this variant, used in the results table"`
+
+	Link      string `json:"link,omitempty" jsonschema:"an entirely different setup to compare, as a share link. Everything else in this variant is ignored."`
+	GearSet   string `json:"gearSet,omitempty" jsonschema:"swap the whole gear set for a checked-in one"`
+	Rotation  string `json:"rotation,omitempty" jsonschema:"swap the rotation for a checked-in one"`
+	Talents   string `json:"talents,omitempty" jsonschema:"swap the talent string"`
+	Encounter string `json:"encounter,omitempty" jsonschema:"fight this encounter instead"`
+
+	Items []itemChange `json:"items,omitempty" jsonschema:"swap individual items, leaving the rest of the gear alone"`
+}
+
+type itemChange struct {
+	Slot    string  `json:"slot" jsonschema:"the slot to change, e.g. Trinket1 or MainHand"`
+	ItemID  int32   `json:"itemId" jsonschema:"the item to equip. Zero empties the slot."`
+	Enchant int32   `json:"enchant,omitempty" jsonschema:"enchant effect id to apply. Omit to keep the slot's current enchant."`
+	Gems    []int32 `json:"gems,omitempty" jsonschema:"gem ids to socket. Omit to keep the current gems."`
+}
+
+type compareInput struct {
+	setupInput
+
+	Variants   []comparisonVariant `json:"variants" jsonschema:"the changes to compare against the base setup, at most 40"`
+	Iterations int32               `json:"iterations,omitempty" jsonschema:"iterations per variant. Defaults to 2000. Variants times iterations may not exceed 200000."`
+	Seed       int64               `json:"seed,omitempty" jsonschema:"RNG seed, shared by every variant. Defaults to a fixed value."`
+}
+
+type compareOutput struct {
+	Base    comparisonRow   `json:"base" jsonschema:"the unchanged setup, which every variant is measured against"`
+	Results []comparisonRow `json:"results" jsonschema:"one row per variant, best first"`
+	Notes   []string        `json:"notes,omitempty" jsonschema:"which defaults were applied to the base setup"`
+}
+
+type comparisonRow struct {
+	Label       string  `json:"label"`
+	Dps         float64 `json:"dps"`
+	StdErr      float64 `json:"stderr" jsonschema:"standard error of this variant's DPS"`
+	Delta       float64 `json:"delta,omitempty" jsonschema:"DPS difference from the base setup"`
+	DeltaPct    float64 `json:"deltaPercent,omitempty" jsonschema:"difference from the base as a percentage"`
+	Significant bool    `json:"significant" jsonschema:"true when the difference is larger than the combined error of both runs. A false here means the variants are indistinguishable at this iteration count, not that they are equal."`
+	Link        string  `json:"link" jsonschema:"share link for this variant"`
+	Error       string  `json:"error,omitempty" jsonschema:"why this variant could not be simulated"`
+}
+
+func simCompare(config engine.Config) spec.Entry {
+	return spec.Tool[compareInput, compareOutput]{
+		Name:    "sim_compare_batch",
+		Title:   "Compare setups",
+		Summary: "Simulates a base setup and a list of variations at one seed, and ranks them by DPS with the error on each difference.",
+		Details: "The tool to reach for whenever the question is 'which is better'. Every variant runs against the\n" +
+			"same seed and the same random streams as the base, so the difference between them is far less\n" +
+			"noisy than two separate sim_run calls would be.\n\n" +
+			"Read `significant` before believing a ranking: a difference smaller than the combined error is\n" +
+			"noise, and the answer is either 'no measurable difference' or 'run it again with more\n" +
+			"iterations'. Searching a large space is done by calling this repeatedly on a narrowing set of\n" +
+			"candidates, not by one enormous call -- see the find_bis prompt.",
+		Examples: []spec.Example{
+			{
+				Description: "compare two trinkets",
+				Args:        `{"spec": "SmitePriest", "gearSet": "p3", "variants": [{"label": "Icon", "items": [{"slot": "Trinket1", "itemId": 29370}]}, {"label": "Skull", "items": [{"slot": "Trinket1", "itemId": 32483}]}]}`,
+			},
+			{
+				Description: "compare gear sets across phases",
+				Args:        `{"spec": "SmitePriest", "variants": [{"label": "p3", "gearSet": "p3"}, {"label": "p5", "gearSet": "p5"}]}`,
+			},
+		},
+		ReadOnly: true,
+		Handler: func(ctx context.Context, request *mcp.CallToolRequest, input compareInput) (*mcp.CallToolResult, compareOutput, error) {
+			var output compareOutput
+
+			if len(input.Variants) == 0 {
+				return nil, output, fmt.Errorf("supply at least one variant to compare against the base")
+			}
+			if len(input.Variants) > maxVariants {
+				return nil, output, fmt.Errorf("%d variants is above the limit of %d; narrow the candidates and call again", len(input.Variants), maxVariants)
+			}
+
+			iterations := input.Iterations
+			if iterations <= 0 {
+				iterations = defaultIterations
+			}
+			if budget := int(iterations) * (len(input.Variants) + 1); budget > maxComparisonIterations {
+				return nil, output, fmt.Errorf("%d variants at %d iterations is %d simulated fights, above the limit of %d; use fewer variants or fewer iterations",
+					len(input.Variants), iterations, budget, maxComparisonIterations)
+			}
+
+			base, notes, err := input.resolve(config)
+			if err != nil {
+				return nil, output, err
+			}
+			output.Notes = notes
+
+			// Every variant is a change to the same base, so they are built up front and run
+			// together: one failing to build should not waste the simulations of the others.
+			settings := make([]*proto.IndividualSimSettings, len(input.Variants))
+			buildErrors := make([]error, len(input.Variants))
+			for i, variant := range input.Variants {
+				settings[i], buildErrors[i] = applyVariant(config, base, variant)
+			}
+
+			options := core.SimRequestOptions{
+				Iterations: iterations,
+				RandomSeed: input.Seed,
+				// Ties each variant's randomness to the base's, so a difference reflects the change
+				// rather than the dice. The same trick the stat weight code uses.
+				UseLabeledRands: true,
+			}
+
+			baseRow, err := runComparison(config, "base", base, options)
+			if err != nil {
+				return nil, output, err
+			}
+			output.Base = baseRow
+
+			rows := make([]comparisonRow, len(input.Variants))
+			var wait sync.WaitGroup
+			guard := make(chan struct{}, runtime.NumCPU())
+
+			for i, variant := range input.Variants {
+				label := variant.Label
+				if label == "" {
+					label = fmt.Sprintf("variant %d", i+1)
+				}
+				if buildErrors[i] != nil {
+					rows[i] = comparisonRow{Label: label, Error: buildErrors[i].Error()}
+					continue
+				}
+
+				wait.Add(1)
+				go func(i int, label string, variantSettings *proto.IndividualSimSettings) {
+					defer wait.Done()
+					guard <- struct{}{}
+					defer func() { <-guard }()
+
+					row, err := runComparison(config, label, variantSettings, options)
+					if err != nil {
+						rows[i] = comparisonRow{Label: label, Error: err.Error()}
+						return
+					}
+					rows[i] = row
+				}(i, label, settings[i])
+			}
+			wait.Wait()
+
+			for i := range rows {
+				if rows[i].Error != "" {
+					continue
+				}
+				rows[i].Delta = round(rows[i].Dps - baseRow.Dps)
+				if baseRow.Dps != 0 {
+					rows[i].DeltaPct = round(100 * rows[i].Delta / baseRow.Dps)
+				}
+				// Conservative: the paired seeds make the real uncertainty on a difference smaller
+				// than this, so anything flagged significant is comfortably so.
+				combined := 2 * math.Sqrt(rows[i].StdErr*rows[i].StdErr+baseRow.StdErr*baseRow.StdErr)
+				rows[i].Significant = math.Abs(rows[i].Delta) > combined
+			}
+
+			slices.SortFunc(rows, func(a, b comparisonRow) int {
+				switch {
+				case a.Error != "" && b.Error == "":
+					return 1
+				case a.Error == "" && b.Error != "":
+					return -1
+				case a.Dps > b.Dps:
+					return -1
+				case a.Dps < b.Dps:
+					return 1
+				}
+				return 0
+			})
+
+			output.Results = rows
+			return nil, output, nil
+		},
+	}
+}
+
+func runComparison(config engine.Config, label string, settings *proto.IndividualSimSettings, options core.SimRequestOptions) (comparisonRow, error) {
+	request, err := core.BuildRaidSimRequest(settings, options)
+	if err != nil {
+		return comparisonRow{}, err
+	}
+
+	// Each variant runs single-threaded and the variants run in parallel: less coordination than
+	// splitting every run across every core, and it matches the shape of the work.
+	result := core.RunRaidSim(request)
+	if result.Error != nil {
+		return comparisonRow{}, fmt.Errorf("%s", result.Error.Message)
+	}
+
+	summary := engine.SummarizeResult(request, result, 1)
+	link, err := shareLink(config, settings)
+	if err != nil {
+		return comparisonRow{}, err
+	}
+
+	return comparisonRow{
+		Label:  label,
+		Dps:    summary.Dps.Avg,
+		StdErr: summary.Dps.StdErr,
+		Link:   link,
+	}, nil
+}
+
+// applyVariant returns a copy of base with the variant's changes applied. The base is untouched,
+// so variants cannot leak into each other.
+func applyVariant(config engine.Config, base *proto.IndividualSimSettings, variant comparisonVariant) (*proto.IndividualSimSettings, error) {
+	if variant.Link != "" {
+		return core.DecodeIndividualShareLink(variant.Link)
+	}
+
+	settings := googleProto.Clone(base).(*proto.IndividualSimSettings)
+	simSpec := core.PlayerProtoToSpec(settings.Player)
+
+	if variant.GearSet != "" {
+		gear, err := config.LoadGearSet(simSpec, variant.GearSet)
+		if err != nil {
+			return nil, err
+		}
+		settings.Player.Equipment = gear
+	}
+
+	if variant.Rotation != "" {
+		rotation, err := config.LoadRotation(simSpec, variant.Rotation)
+		if err != nil {
+			return nil, err
+		}
+		settings.Player.Rotation = rotation
+	}
+
+	if variant.Talents != "" {
+		settings.Player.TalentsString = variant.Talents
+	}
+
+	if variant.Encounter != "" {
+		encounter, err := engine.Encounter(variant.Encounter)
+		if err != nil {
+			return nil, err
+		}
+		settings.Encounter = encounter
+	}
+
+	for _, change := range variant.Items {
+		if err := applyItemChange(settings.Player.Equipment, change); err != nil {
+			return nil, err
+		}
+	}
+
+	return settings, nil
+}
+
+func applyItemChange(equipment *proto.EquipmentSpec, change itemChange) error {
+	if equipment == nil {
+		return fmt.Errorf("the base setup has no equipment to change")
+	}
+
+	value, ok := proto.ItemSlot_value["ItemSlot"+change.Slot]
+	if !ok {
+		return fmt.Errorf("unknown slot %q", change.Slot)
+	}
+	slot := int(value)
+
+	for len(equipment.Items) <= slot {
+		equipment.Items = append(equipment.Items, &proto.ItemSpec{})
+	}
+	if equipment.Items[slot] == nil {
+		equipment.Items[slot] = &proto.ItemSpec{}
+	}
+
+	item := equipment.Items[slot]
+	if change.ItemID != item.Id {
+		// A different item does not keep the old one's enchant and gems, which would silently
+		// carry stats onto something that cannot hold them.
+		*item = proto.ItemSpec{Id: change.ItemID}
+	}
+	if change.Enchant != 0 {
+		item.Enchant = change.Enchant
+	}
+	if len(change.Gems) > 0 {
+		item.Gems = change.Gems
+	}
+	return nil
+}

@@ -7,6 +7,7 @@ package registry
 import (
 	"github.com/wowsims/tbc/mcp/internal/engine"
 	"github.com/wowsims/tbc/mcp/internal/engine/jobs"
+	"github.com/wowsims/tbc/mcp/internal/prompts"
 	"github.com/wowsims/tbc/mcp/internal/resources"
 	"github.com/wowsims/tbc/mcp/internal/spec"
 	"github.com/wowsims/tbc/mcp/internal/tools"
@@ -17,5 +18,6 @@ func All(config engine.Config, store jobs.Store) []spec.Entry {
 	var entries []spec.Entry
 	entries = append(entries, tools.Entries(config, store)...)
 	entries = append(entries, resources.Entries(config)...)
+	entries = append(entries, prompts.Entries(config)...)
 	return entries
 }
