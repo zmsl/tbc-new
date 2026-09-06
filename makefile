@@ -108,10 +108,15 @@ host_%: $(OUT_DIR) node_modules
 wasm: $(OUT_DIR)/lib.wasm
 
 # Builds the generic .wasm, with all items included.
+#
+# -s -w matches the native release builds. It drops the symbol table and DWARF, which is worth
+# 0.8MB of the first thing every visitor downloads, and costs nothing at runtime: Go tracebacks
+# read pclntab, which the linker keeps regardless, so the panic reports runSim sends back to the
+# UI still name their functions.
 WASM_FEATURES := --enable-sign-ext --enable-nontrapping-float-to-int --enable-mutable-globals --enable-bulk-memory
 $(OUT_DIR)/lib.wasm: sim/wasm/* sim/core/proto/api.pb.go $(filter-out sim/core/items/all_items.go, $(call rwildcard,sim,*.go))
 	@echo "Starting webassembly compile now..."
-	@if GOWASM=satconv,signext GOOS=js GOARCH=wasm go build -o ./$(OUT_DIR)/lib.wasm ./sim/wasm/; then \
+	@if GOWASM=satconv,signext GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o ./$(OUT_DIR)/lib.wasm ./sim/wasm/; then \
 		printf "\033[1;32mWASM compile successful.\033[0m\n"; \
 	else \
 		printf "\033[1;31mWASM COMPILE FAILED\033[0m\n"; \
