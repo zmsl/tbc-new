@@ -2,6 +2,7 @@ package registry_test
 
 import (
 	"encoding/json"
+	"math"
 	"strings"
 	"testing"
 
@@ -333,4 +334,93 @@ func promptText(t *testing.T, result *mcp.GetPromptResult) string {
 		text.WriteString(content.Text)
 	}
 	return text.String()
+}
+
+type combinedResult struct {
+	Applied     []string          `json:"applied"`
+	Excluded    map[string]string `json:"excluded"`
+	Dps         float64           `json:"dps"`
+	Delta       float64           `json:"delta"`
+	SumOfDeltas float64           `json:"sumOfDeltas"`
+	Interaction float64           `json:"interaction"`
+	Significant bool              `json:"interactionSignificant"`
+	Link        string            `json:"link"`
+}
+
+// Measuring changes one at a time assumes they add up. The combined run is what checks that
+// assumption instead of leaving it to be made.
+func TestCompareBatchCombinesImprovements(t *testing.T) {
+	session := connect(t)
+
+	var output struct {
+		Base     comparisonRow   `json:"base"`
+		Results  []comparisonRow `json:"results"`
+		Combined *combinedResult `json:"combined"`
+	}
+	output = callTool[struct {
+		Base     comparisonRow   `json:"base"`
+		Results  []comparisonRow `json:"results"`
+		Combined *combinedResult `json:"combined"`
+	}](t, session, "sim_compare_batch", map[string]any{
+		"spec":       "SmitePriest",
+		"gearSet":    "p3",
+		"iterations": 1000,
+		"variants": []map[string]any{
+			// Two upgrades from the phase 5 set, in different slots.
+			{"label": "p5 helm", "items": []map[string]any{{"slot": "Head", "itemId": 34340, "enchant": 3002, "gems": []int{35503, 35761}}}},
+			{"label": "p5 chest", "items": []map[string]any{{"slot": "Chest", "itemId": 34399, "enchant": 1144}}},
+		},
+	})
+
+	if output.Combined == nil {
+		t.Fatal("two improvements in different slots produced no combined run")
+	}
+	if len(output.Combined.Applied) != 2 {
+		t.Errorf("combined applied %v", output.Combined.Applied)
+	}
+	if output.Combined.Delta <= 0 {
+		t.Errorf("applying both upgrades lost dps: %+v", output.Combined)
+	}
+
+	// The reported interaction has to be the arithmetic it claims to be. Every figure is rounded
+	// for reading, so compare within that rounding rather than exactly.
+	if got, want := output.Combined.Interaction, output.Combined.Delta-output.Combined.SumOfDeltas; math.Abs(got-want) > 0.011 {
+		t.Errorf("interaction = %v, but delta - sumOfDeltas = %v", got, want)
+	}
+	// Two ordinary stat upgrades in different slots should very nearly add up.
+	if output.Combined.Significant {
+		t.Errorf("two plain upgrades were reported as interacting: %+v", output.Combined)
+	}
+	if output.Combined.Link == "" {
+		t.Error("no link for the combined setup")
+	}
+}
+
+// Alternatives for one slot cannot be worn together, and a losing variant is not an improvement
+// to carry forward. Both have to be excluded, with the reason said out loud.
+func TestCompareBatchExcludesWhatCannotCombine(t *testing.T) {
+	session := connect(t)
+
+	output := callTool[struct {
+		Combined *combinedResult `json:"combined"`
+	}](t, session, "sim_compare_batch", map[string]any{
+		"spec":       "SmitePriest",
+		"gearSet":    "p3",
+		"iterations": 500,
+		"variants": []map[string]any{
+			{"label": "trinket a", "items": []map[string]any{{"slot": "Trinket1", "itemId": 32496}}},
+			{"label": "trinket b", "items": []map[string]any{{"slot": "Trinket1", "itemId": 30665}}},
+			{"label": "whole p5 set", "gearSet": "p5"},
+		},
+	})
+
+	// Only one slot is in play and the third variant replaces everything, so there is nothing to
+	// combine and the tool must say nothing rather than invent a set.
+	if output.Combined != nil && len(output.Combined.Applied) > 1 {
+		for _, applied := range output.Combined.Applied {
+			if applied == "trinket a" || applied == "trinket b" {
+				t.Errorf("two trinkets for the same slot were combined: %+v", output.Combined)
+			}
+		}
+	}
 }

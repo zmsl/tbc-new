@@ -51,9 +51,31 @@ type compareInput struct {
 }
 
 type compareOutput struct {
-	Base    comparisonRow   `json:"base" jsonschema:"the unchanged setup, which every variant is measured against"`
-	Results []comparisonRow `json:"results" jsonschema:"one row per variant, best first"`
-	Notes   []string        `json:"notes,omitempty" jsonschema:"which defaults were applied to the base setup"`
+	Base     comparisonRow   `json:"base" jsonschema:"the unchanged setup, which every variant is measured against"`
+	Results  []comparisonRow `json:"results" jsonschema:"one row per variant, best first"`
+	Combined *combinedResult `json:"combined,omitempty" jsonschema:"the improvements applied together, when more than one of them can be"`
+	Notes    []string        `json:"notes,omitempty" jsonschema:"which defaults were applied to the base setup"`
+}
+
+// Variants are measured one at a time, so reading the winners as an upgrade path assumes they
+// add up. Usually they do. They stop adding up wherever the game has a threshold -- the spell hit
+// cap, a set bonus, a meta gem whose colour requirement a swap breaks -- and nothing in the
+// individual measurements would show it. So the improvements are also run together, and the
+// interaction is reported rather than left to be assumed.
+type combinedResult struct {
+	Applied  []string          `json:"applied" jsonschema:"the variants that were applied together"`
+	Excluded map[string]string `json:"excluded,omitempty" jsonschema:"variants left out, and why"`
+
+	Dps      float64 `json:"dps"`
+	StdErr   float64 `json:"stderr"`
+	Delta    float64 `json:"delta" jsonschema:"DPS difference from the base setup with all of them applied"`
+	DeltaPct float64 `json:"deltaPercent"`
+
+	SumOfDeltas float64 `json:"sumOfDeltas" jsonschema:"what the individual measurements add up to, which is what you would have assumed"`
+	Interaction float64 `json:"interaction" jsonschema:"measured minus assumed. Negative means the changes overlap -- a stat cap reached twice, say; positive means they reinforce, like a set bonus completed."`
+	Significant bool    `json:"interactionSignificant" jsonschema:"true when the interaction is larger than the measurement error. When false the changes add up, and picking them one slot at a time was safe."`
+
+	Link string `json:"link" jsonschema:"share link for the combined setup"`
 }
 
 type comparisonRow struct {
@@ -75,6 +97,10 @@ func simCompare(config engine.Config) spec.Entry {
 		Details: "The tool to reach for whenever the question is 'which is better'. Every variant runs against the\n" +
 			"same seed and the same random streams as the base, so the difference between them is far less\n" +
 			"noisy than two separate sim_run calls would be.\n\n" +
+			"When more than one variant is an improvement and they change different slots, they are also run\n" +
+			"together and reported as `combined`. Read its `interaction`: measuring changes one at a time\n" +
+			"assumes they add up, which stops being true at a stat cap, a set bonus, or a gem swap that\n" +
+			"deactivates a meta gem. An insignificant interaction means picking slot by slot was safe.\n\n" +
 			"Read `significant` before believing a ranking: a difference smaller than the combined error is\n" +
 			"noise, and the answer is either 'no measurable difference' or 'run it again with more\n" +
 			"iterations'. Searching a large space is done by calling this repeatedly on a narrowing set of\n" +
@@ -104,7 +130,8 @@ func simCompare(config engine.Config) spec.Entry {
 			if iterations <= 0 {
 				iterations = defaultIterations
 			}
-			if budget := int(iterations) * (len(input.Variants) + 1); budget > maxComparisonIterations {
+			// Variants, plus the base, plus the combined run.
+			if budget := int(iterations) * (len(input.Variants) + 2); budget > maxComparisonIterations {
 				return nil, output, fmt.Errorf("%d variants at %d iterations is %d simulated fights, above the limit of %d; use fewer variants or fewer iterations",
 					len(input.Variants), iterations, budget, maxComparisonIterations)
 			}
@@ -196,9 +223,96 @@ func simCompare(config engine.Config) spec.Entry {
 			})
 
 			output.Results = rows
+			output.Combined = combine(config, base, input.Variants, rows, baseRow, options)
 			return nil, output, nil
 		},
 	}
+}
+
+// combine runs the improvements together, when more than one of them can be. Returns nil when
+// there is nothing to say: fewer than two improvements, or none that can be applied side by side.
+func combine(config engine.Config, base *proto.IndividualSimSettings, variants []comparisonVariant, rows []comparisonRow, baseRow comparisonRow, options core.SimRequestOptions) *combinedResult {
+	byLabel := map[string]comparisonRow{}
+	for _, row := range rows {
+		byLabel[row.Label] = row
+	}
+
+	result := &combinedResult{Excluded: map[string]string{}}
+	combined := googleProto.Clone(base).(*proto.IndividualSimSettings)
+	claimed := map[string]string{}
+
+	for i, variant := range variants {
+		label := variant.Label
+		if label == "" {
+			label = fmt.Sprintf("variant %d", i+1)
+		}
+		row, measured := byLabel[label]
+
+		switch {
+		case !measured || row.Error != "":
+			result.Excluded[label] = "it did not run"
+		case row.Delta <= 0:
+			result.Excluded[label] = "it was not an improvement"
+		case len(variant.Items) == 0:
+			// A whole different gear set, rotation or encounter is an alternative to the base
+			// rather than a change that could sit alongside another one.
+			result.Excluded[label] = "it replaces the setup rather than changing part of it"
+		default:
+			if conflict := firstClaimedSlot(variant.Items, claimed); conflict != "" {
+				result.Excluded[label] = "it changes the same slot as " + conflict
+				continue
+			}
+			for _, change := range variant.Items {
+				if err := applyItemChange(combined.Player.Equipment, change); err != nil {
+					result.Excluded[label] = err.Error()
+					continue
+				}
+				claimed[change.Slot] = label
+			}
+			result.Applied = append(result.Applied, label)
+			result.SumOfDeltas += row.Delta
+		}
+	}
+
+	if len(result.Applied) < 2 {
+		return nil
+	}
+
+	row, err := runComparison(config, "combined", combined, options)
+	if err != nil {
+		return nil
+	}
+
+	result.Dps, result.StdErr, result.Link = row.Dps, row.StdErr, row.Link
+	result.Delta = round(row.Dps - baseRow.Dps)
+	if baseRow.Dps != 0 {
+		result.DeltaPct = round(100 * result.Delta / baseRow.Dps)
+	}
+	result.SumOfDeltas = round(result.SumOfDeltas)
+	result.Interaction = round(result.Delta - result.SumOfDeltas)
+
+	// The interaction is a difference of differences, so it carries the error of the combined run
+	// and of every individual one it is compared against.
+	variance := row.StdErr*row.StdErr + baseRow.StdErr*baseRow.StdErr
+	for _, label := range result.Applied {
+		applied := byLabel[label]
+		variance += applied.StdErr*applied.StdErr + baseRow.StdErr*baseRow.StdErr
+	}
+	result.Significant = math.Abs(result.Interaction) > 2*math.Sqrt(variance)
+
+	if len(result.Excluded) == 0 {
+		result.Excluded = nil
+	}
+	return result
+}
+
+func firstClaimedSlot(changes []itemChange, claimed map[string]string) string {
+	for _, change := range changes {
+		if owner, taken := claimed[change.Slot]; taken {
+			return owner
+		}
+	}
+	return ""
 }
 
 func runComparison(config engine.Config, label string, settings *proto.IndividualSimSettings, options core.SimRequestOptions) (comparisonRow, error) {

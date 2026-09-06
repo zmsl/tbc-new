@@ -51,9 +51,10 @@ func findBiS() spec.Entry {
 				"3. `sim_stat_weights` on the baseline. The weights say what a point of each stat is worth, and they are how candidates get ranked without simulating every one.\n"+
 				"4. For each slot worth changing, `db_search_items` with `maxPhase: %s`, the spec's class, and the slot. Score the results with the stat weights and keep the best three to five per slot.\n"+
 				"5. Narrow with `sim_compare_batch`, one slot at a time, starting from the slots where the candidates differ most. Each call compares the current best set against the candidates for one slot; keep the winner and move on. This converges in a few calls per slot rather than combinatorially.\n"+
-				"6. Watch `significant` on every row. When a difference is not significant, the two options are indistinguishable at that iteration count -- either say so and pick on another basis, or re-run the close pair with more iterations.\n"+
-				"7. Before trusting the final set, `gear_validate` it. Unique-equipped items, meta gem colour requirements and enchant restrictions are not enforced by the simulator, and a set that breaks them is not a real answer.\n"+
-				"8. Re-run the finalists at 20000 iterations or more to separate the last few DPS, then report the set, its DPS with the error, the gain over the baseline, and the share link.\n\n"+
+				"6. When a call compares changes to different slots, read the `combined` row it returns: it applies the improvements together and reports the `interaction` -- how far the measured total is from the sum of the parts. Slot-by-slot picking assumes they add up, and that assumption breaks at the hit cap, at a set bonus, and at a meta gem a swap deactivates. An insignificant interaction means the greedy path was safe.\n"+
+				"7. Watch `significant` on every row. When a difference is not significant, the two options are indistinguishable at that iteration count -- either say so and pick on another basis, or re-run the close pair with more iterations.\n"+
+				"8. Before trusting the final set, `gear_validate` it. Unique-equipped items, meta gem colour requirements and enchant restrictions are not enforced by the simulator, and a set that breaks them is not a real answer.\n"+
+				"9. Re-run the finalists at 20000 iterations or more to separate the last few DPS, then report the set, its DPS with the error, the gain over the baseline, and the share link.\n\n"+
 				"State the assumptions you optimised under -- encounter, buffs, talents, rotation -- because a 'best' set is only best for those.",
 				specName, phase, encounter, phase)
 		},

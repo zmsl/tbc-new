@@ -2183,6 +2183,11 @@ The tool to reach for whenever the question is 'which is better'. Every variant 
 same seed and the same random streams as the base, so the difference between them is far less
 noisy than two separate sim_run calls would be.
 
+When more than one variant is an improvement and they change different slots, they are also run
+together and reported as `combined`. Read its `interaction`: measuring changes one at a time
+assumes they add up, which stops being true at a stat cap, a set bonus, or a gem swap that
+deactivates a meta gem. An insignificant interaction means picking slot by slot was safe.
+
 Read `significant` before believing a ranking: a difference smaller than the combined error is
 noise, and the answer is either 'no measurable difference' or 'run it again with more
 iterations'. Searching a large space is done by calling this repeatedly on a narrowing set of
@@ -2440,6 +2445,73 @@ Read-only.
         "additionalProperties": false
       },
       "description": "one row per variant, best first"
+    },
+    "combined": {
+      "type": [
+        "null",
+        "object"
+      ],
+      "properties": {
+        "applied": {
+          "type": [
+            "null",
+            "array"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "description": "the variants that were applied together"
+        },
+        "excluded": {
+          "type": "object",
+          "description": "variants left out, and why",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "dps": {
+          "type": "number"
+        },
+        "stderr": {
+          "type": "number"
+        },
+        "delta": {
+          "type": "number",
+          "description": "DPS difference from the base setup with all of them applied"
+        },
+        "deltaPercent": {
+          "type": "number"
+        },
+        "sumOfDeltas": {
+          "type": "number",
+          "description": "what the individual measurements add up to, which is what you would have assumed"
+        },
+        "interaction": {
+          "type": "number",
+          "description": "measured minus assumed. Negative means the changes overlap -- a stat cap reached twice, say; positive means they reinforce, like a set bonus completed."
+        },
+        "interactionSignificant": {
+          "type": "boolean",
+          "description": "true when the interaction is larger than the measurement error. When false the changes add up, and picking them one slot at a time was safe."
+        },
+        "link": {
+          "type": "string",
+          "description": "share link for the combined setup"
+        }
+      },
+      "description": "the improvements applied together, when more than one of them can be",
+      "required": [
+        "applied",
+        "dps",
+        "stderr",
+        "delta",
+        "deltaPercent",
+        "sumOfDeltas",
+        "interaction",
+        "interactionSignificant",
+        "link"
+      ],
+      "additionalProperties": false
     },
     "notes": {
       "type": [
@@ -3154,9 +3226,10 @@ Work like this:
 3. `sim_stat_weights` on the baseline. The weights say what a point of each stat is worth, and they are how candidates get ranked without simulating every one.
 4. For each slot worth changing, `db_search_items` with `maxPhase: the target phase`, the spec's class, and the slot. Score the results with the stat weights and keep the best three to five per slot.
 5. Narrow with `sim_compare_batch`, one slot at a time, starting from the slots where the candidates differ most. Each call compares the current best set against the candidates for one slot; keep the winner and move on. This converges in a few calls per slot rather than combinatorially.
-6. Watch `significant` on every row. When a difference is not significant, the two options are indistinguishable at that iteration count -- either say so and pick on another basis, or re-run the close pair with more iterations.
-7. Before trusting the final set, `gear_validate` it. Unique-equipped items, meta gem colour requirements and enchant restrictions are not enforced by the simulator, and a set that breaks them is not a real answer.
-8. Re-run the finalists at 20000 iterations or more to separate the last few DPS, then report the set, its DPS with the error, the gain over the baseline, and the share link.
+6. When a call compares changes to different slots, read the `combined` row it returns: it applies the improvements together and reports the `interaction` -- how far the measured total is from the sum of the parts. Slot-by-slot picking assumes they add up, and that assumption breaks at the hit cap, at a set bonus, and at a meta gem a swap deactivates. An insignificant interaction means the greedy path was safe.
+7. Watch `significant` on every row. When a difference is not significant, the two options are indistinguishable at that iteration count -- either say so and pick on another basis, or re-run the close pair with more iterations.
+8. Before trusting the final set, `gear_validate` it. Unique-equipped items, meta gem colour requirements and enchant restrictions are not enforced by the simulator, and a set that breaks them is not a real answer.
+9. Re-run the finalists at 20000 iterations or more to separate the last few DPS, then report the set, its DPS with the error, the gain over the baseline, and the share link.
 
 State the assumptions you optimised under -- encounter, buffs, talents, rotation -- because a 'best' set is only best for those.
 ```
