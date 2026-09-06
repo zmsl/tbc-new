@@ -443,7 +443,17 @@ func runSimConcurrent(request *proto.RaidSimRequest, progress chan *proto.Progre
 		}
 	}()
 
-	splitRes := SplitSimRequestForConcurrency(request, TernaryInt32(request.SimOptions.IsTest, 3, int32(runtime.NumCPU())))
+	// GOMAXPROCS rather than NumCPU: NumCPU reports the host's cores and ignores both a cgroup
+	// CPU limit and an explicit GOMAXPROCS, so a containerised server -- or a user who asked the
+	// sim to stay off half their machine -- got more splits than they had parallelism to run
+	// them, each extra split paying its own environment construction for nothing. Since Go 1.25
+	// the default GOMAXPROCS is itself container-aware, so this reads the right number in both
+	// cases.
+	//
+	// Split count does not affect results: every iteration is reseeded from its global index, so
+	// iteration N draws the same numbers whatever split it lands in. TestX/CompareResults checks
+	// exactly that, single-threaded against concurrent.
+	splitRes := SplitSimRequestForConcurrency(request, TernaryInt32(request.SimOptions.IsTest, 3, int32(runtime.GOMAXPROCS(0))))
 
 	if splitRes.ErrorResult != "" {
 		panic(splitRes.ErrorResult)

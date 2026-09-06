@@ -188,6 +188,42 @@ was on the plan for this work and was dropped after measurement: it is the riski
 available (shared mutable state leaking between splits produces wrong answers that still look
 plausible) in exchange for a fraction of a percent.
 
+## Precomputing, and why the obvious one does not pay
+
+Most comparisons in a real rotation are against a literal -- 95% of the protection warrior
+priority list, 86% of rogue's, 78% of arms, 38% even in feral cat's. Reading that literal once at
+finalize and comparing against a stored field removes an interface call from every evaluation of
+those nodes, which sounds like it should be free money.
+
+Measured back to back, ten runs each: rogue **4% slower** (p=0.03), feral cat unchanged. The
+interface call being removed was to `APLValueConst`, a leaf that returns a struct field, and each
+call site sees exactly one type so the indirect branch predicts perfectly. What replaced it was a
+per-evaluation branch plus five more fields on a struct that is already walked in bulk. The call
+was cheaper than the cache.
+
+The general lesson, which held for the failed ordering experiment too: in this loop the cost is
+*reaching* the code, not running it. Optimizations that add state to hot structs to avoid cheap,
+well-predicted work tend to lose.
+
+## Parallelization
+
+Iterations are independent, and both runtimes already exploit that -- `runSimConcurrent` splits
+across `GOMAXPROCS` goroutines, the web build across workers. Two things are worth knowing.
+
+**Split count does not change results.** Every iteration is reseeded from its global index, so
+iteration N draws the same numbers no matter which split runs it. Verified by forcing the golden
+suite through split counts of 3, 5 and 7 and getting zero diffs. That makes the split count a
+free knob, which is not obvious and is worth not re-deriving.
+
+**Finer splits are not free, though.** Each split builds its own environment, about 1ms. Going
+from 16 splits to 64 to smooth out tail latency on a busy machine costs ~48ms of setup against a
+sim that runs in a couple of seconds -- roughly 2%, to buy back a tail that is small on an idle
+machine. Worth doing only alongside a work-stealing pool, and only if someone measures the tail
+first.
+
+Stat weights run their sub-sims sequentially, each one internally parallel, so cores stay busy;
+what it costs is one tail per sub-sim rather than one for the whole run.
+
 ## The browser
 
 The web sim runs the same Go engine compiled to WebAssembly, so everything above applies to it
