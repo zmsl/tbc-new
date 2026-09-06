@@ -2,6 +2,7 @@ import { getLang } from '../i18n/locale_service';
 import { hasTouch } from '../shared/bootstrap_overrides';
 import { SimRequest } from '../worker/types';
 import { CURRENT_PHASE, LOCAL_STORAGE_PREFIX } from './constants/other';
+import { setAllowPrerelease } from './desktop';
 import { Encounter } from './encounter';
 import { Player, UnitMetadata } from './player';
 import {
@@ -58,6 +59,7 @@ export type RunSimOptions = {
 
 const WASM_CONCURRENCY_STORAGE_KEY = `${LOCAL_STORAGE_PREFIX}_wasmconcurrency`;
 const WASM_CONCURRENCY_UNLOCKED_STORAGE_KEY = `${LOCAL_STORAGE_PREFIX}_wasmconcurrencyunlocked`;
+const ALLOW_PRERELEASE_STORAGE_KEY = `${LOCAL_STORAGE_PREFIX}_allowprerelease`;
 
 // Core Sim module which deals only with api types, no UI-related stuff.
 // The backend needs an inactive meta gem left in its socket so the item's socket bonus still
@@ -87,6 +89,7 @@ export class Sim {
 	private showExperimental = false;
 	private wasmConcurrency = 0;
 	private wasmConcurrencyUnlocked = false;
+	private allowPrerelease = false;
 	private showQuickSwap = true;
 	private showEPValues = false;
 	private language = '';
@@ -109,6 +112,7 @@ export class Sim {
 	readonly showExperimentalChangeEmitter = new TypedEvent<void>();
 	readonly wasmConcurrencyChangeEmitter = new TypedEvent<void>();
 	readonly wasmConcurrencyUnlockedChangeEmitter = new TypedEvent<void>();
+	readonly allowPrereleaseChangeEmitter = new TypedEvent<void>();
 	readonly showQuickSwapChangeEmitter = new TypedEvent<void>();
 	readonly showEPValuesChangeEmitter = new TypedEvent<void>();
 	readonly languageChangeEmitter = new TypedEvent<void>();
@@ -165,6 +169,11 @@ export class Sim {
 		}
 		this.setWasmConcurrency(TypedEvent.nextEventID(), wasmConcurrencySetting);
 
+		// The desktop updater does not remember this between launches, so tell it what the user
+		// chose. Harmless on the website, where there is no bridge to tell.
+		this.allowPrerelease = window.localStorage.getItem(ALLOW_PRERELEASE_STORAGE_KEY) === 'true';
+		setAllowPrerelease(this.allowPrerelease);
+
 		this.signalManager = new SimSignalManager();
 
 		this._initPromise = Database.get().then(db => {
@@ -185,6 +194,7 @@ export class Sim {
 			this.showExperimentalChangeEmitter,
 			this.wasmConcurrencyChangeEmitter,
 			this.wasmConcurrencyUnlockedChangeEmitter,
+			this.allowPrereleaseChangeEmitter,
 			this.showQuickSwapChangeEmitter,
 			this.showEPValuesChangeEmitter,
 			this.languageChangeEmitter,
@@ -683,6 +693,18 @@ export class Sim {
 			window.localStorage.setItem(WASM_CONCURRENCY_STORAGE_KEY, newWasmConcurrency.toString());
 			this.wasmConcurrencyChangeEmitter.emit(eventID);
 		}
+	}
+
+	getAllowPrerelease(): boolean {
+		return this.allowPrerelease;
+	}
+	setAllowPrerelease(eventID: EventID, newValue: boolean) {
+		if (newValue == this.allowPrerelease) return;
+
+		this.allowPrerelease = newValue;
+		window.localStorage.setItem(ALLOW_PRERELEASE_STORAGE_KEY, newValue.toString());
+		setAllowPrerelease(newValue);
+		this.allowPrereleaseChangeEmitter.emit(eventID);
 	}
 
 	getWasmConcurrencyUnlocked(): boolean {

@@ -35,6 +35,9 @@ export interface DesktopBridge {
 	saveFile: (fileName: string, contents: string) => Promise<{ saved: boolean; filePath?: string }>;
 	startUpdate: () => Promise<DesktopStartUpdateResult>;
 	installUpdate: () => Promise<void>;
+	// Opts the updater in to release candidates. The main process does not persist this, so the
+	// renderer has to push the current value at startup as well as on every change.
+	setAllowPrerelease: (allow: boolean) => Promise<boolean>;
 }
 
 declare global {
@@ -385,6 +388,12 @@ export const copyText = async (text: string): Promise<void> => {
 		return;
 	}
 	await navigator.clipboard.writeText(text);
+};
+
+// Tells the desktop updater whether to offer release candidates. A no-op on the website, and on
+// an older desktop build whose bridge predates the setting -- hence the optional call.
+export const setAllowPrerelease = (allow: boolean): void => {
+	getDesktop()?.setAllowPrerelease?.(allow);
 };
 
 // Saves through a native Save As dialog when running in the desktop app. Returns false when

@@ -3,6 +3,7 @@ import { ref } from 'tsx-vanilla';
 
 import { setLang, supportedLanguages } from '../../i18n/locale_service';
 import i18n from '../../i18n/config';
+import { isDesktop } from '../desktop';
 import { Sim } from '../sim.js';
 import { SimUI } from '../sim_ui.js';
 import { EventID, TypedEvent } from '../typed_event.js';
@@ -30,6 +31,7 @@ export class SettingsMenu extends BaseModal {
 		const useConcurrentWorkersWrap = ref<HTMLDivElement>();
 		const useConcurrentWorkers = ref<HTMLDivElement>();
 		const unlockAllCores = ref<HTMLDivElement>();
+		const allowPrerelease = ref<HTMLDivElement>();
 		const useConcurrentWorkersNote = ref<HTMLDivElement>();
 
 		const body = (
@@ -49,6 +51,7 @@ export class SettingsMenu extends BaseModal {
 				<div ref={showThreatMetrics} className="show-threat-metrics-picker w-50 pe-2"></div>
 				<div ref={showExperimental} className="show-experimental-picker w-50 pe-2"></div>
 				<div ref={showQuickSwap} className="show-quick-swap-picker w-50 pe-2"></div>
+				<div ref={allowPrerelease} className="allow-prerelease-picker w-50 pe-2"></div>
 				<div ref={useConcurrentWorkersWrap} className="use-concurrency-container w-50 pe-2">
 					<div ref={useConcurrentWorkers} className="use-concurrent-workers-picker"></div>
 					<div ref={unlockAllCores} className="unlock-all-cores-picker"></div>
@@ -184,6 +187,27 @@ export class SettingsMenu extends BaseModal {
 					sim.setShowQuickSwap(eventID, newValue);
 				},
 			});
+
+		// Desktop only: there is no updater on the website, and nothing for this to mean there.
+		if (allowPrerelease.value && isDesktop())
+			new BooleanPicker<Sim>(allowPrerelease.value, this.simUI.sim, {
+				id: 'simui-allow-prerelease',
+				label: i18n.t('info.options.feature_toggles.allow_prerelease.label'),
+				labelTooltip: i18n.t('info.options.feature_toggles.allow_prerelease.tooltip'),
+				inline: true,
+				changedEvent: (sim: Sim) => sim.allowPrereleaseChangeEmitter,
+				getValue: (sim: Sim) => sim.getAllowPrerelease(),
+				setValue: (eventID: EventID, sim: Sim, newValue: boolean) => {
+					trackEvent({
+						action: 'settings',
+						category: 'allow-prerelease',
+						label: 'update',
+						value: newValue,
+					});
+					sim.setAllowPrerelease(eventID, newValue);
+				},
+			});
+		else if (allowPrerelease.value) allowPrerelease.value.hidden = true;
 
 		if (useConcurrentWorkersWrap.value && useConcurrentWorkers.value) {
 			const values: EnumValueConfig[] = [{ value: 0, name: 'Off' }];

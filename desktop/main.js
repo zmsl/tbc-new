@@ -409,6 +409,9 @@ function setupAutoUpdate(win) {
 	const canSelfUpdate = process.platform !== 'darwin' || MAC_AUTO_UPDATE_SUPPORTED;
 	autoUpdater.autoDownload = false;
 	autoUpdater.autoInstallOnAppQuit = false;
+	// Set explicitly rather than relying on the default, because the renderer can change it:
+	// this is the value the check below runs with, before any setting has arrived.
+	autoUpdater.allowPrerelease = false;
 
 	const send = (channel, payload) => {
 		if (win && !win.isDestroyed()) win.webContents.send(channel, payload);
@@ -505,6 +508,23 @@ ipcMain.handle('wowsims:gpu-status', () => ({
 	// Electron's default is hardware accelerated; this is here to prove nothing turned it off.
 	hardwareAccelerationDisabled: app.commandLine.hasSwitch('disable-gpu'),
 }));
+
+// Opting in to release candidates. The renderer owns this setting -- it lives with the rest of
+// the sim's settings, in localStorage -- and pushes it here when the UI starts and whenever it
+// changes. The startup check has already run by then with prereleases off, so a user who has
+// opted in gets a second check, which is cheap; the upside is that a message that never arrives
+// leaves the app on stable releases rather than silently opting someone in.
+ipcMain.handle('wowsims:set-allow-prerelease', (_event, allow) => {
+	// An unpackaged run has no updater configured at all; setupAutoUpdate returned early.
+	if (!app.isPackaged) return false;
+
+	const next = !!allow;
+	if (autoUpdater.allowPrerelease === next) return next;
+
+	autoUpdater.allowPrerelease = next;
+	autoUpdater.checkForUpdates().catch(err => console.error('[updater] re-check failed', err));
+	return next;
+});
 
 ipcMain.handle('wowsims:install-update', () => {
 	app.isQuitting = true;
