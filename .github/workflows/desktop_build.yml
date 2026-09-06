@@ -37,7 +37,7 @@ jobs:
             - name: Install Go
               uses: actions/setup-go@v6
               with:
-                  go-version: 1.25.x
+                  go-version: 1.27.x
 
             - name: Install Protoc
               uses: arduino/setup-protoc@v3
@@ -129,6 +129,9 @@ jobs:
               working-directory: desktop
               run: npx electron-builder ${{ matrix.args }} --publish never
 
+            # prerelease/makeLatest are repeated here, not just set once when the release is
+            # created: this step updates the same release, and leaving them out lets the update
+            # promote a prerelease back to Latest.
             - name: Attach to release
               if: inputs.publish
               uses: ncipollo/release-action@v1
@@ -138,6 +141,8 @@ jobs:
                   omitBodyDuringUpdate: true
                   omitNameDuringUpdate: true
                   updateOnlyUnreleased: false
+                  prerelease: ${{ contains(inputs.tag, '-') }}
+                  makeLatest: ${{ !contains(inputs.tag, '-') }}
                   artifactErrorsFailBuild: true
                   artifacts: ${{ matrix.artifacts }}
 

@@ -282,11 +282,43 @@ func getConstAPLFloatValue(value APLValue) float64 {
 	return -1
 }
 
+// Which of the typed comparisons a Compare node performs. Fixed once the rotation is parsed,
+// but reaching it means an interface call, so it is resolved once and remembered.
+type aplCompareKind uint8
+
+const (
+	aplCompareUnresolved aplCompareKind = iota
+	aplCompareBool
+	aplCompareInt
+	aplCompareFloat
+	aplCompareDuration
+	aplCompareString
+	aplCompareUnsupported
+)
+
+func aplCompareKindOf(valueType proto.APLValueType) aplCompareKind {
+	switch valueType {
+	case proto.APLValueType_ValueTypeBool:
+		return aplCompareBool
+	case proto.APLValueType_ValueTypeInt:
+		return aplCompareInt
+	case proto.APLValueType_ValueTypeFloat:
+		return aplCompareFloat
+	case proto.APLValueType_ValueTypeDuration:
+		return aplCompareDuration
+	case proto.APLValueType_ValueTypeString:
+		return aplCompareString
+	default:
+		return aplCompareUnsupported
+	}
+}
+
 type APLValueCompare struct {
 	DefaultAPLValueImpl
-	op  proto.APLValueCompare_ComparisonOperator
-	lhs APLValue
-	rhs APLValue
+	op   proto.APLValueCompare_ComparisonOperator
+	lhs  APLValue
+	rhs  APLValue
+	kind aplCompareKind
 }
 
 func (value *APLValueCompare) GetInnerValues() []APLValue {
@@ -296,15 +328,21 @@ func (value *APLValueCompare) Type() proto.APLValueType {
 	return proto.APLValueType_ValueTypeBool
 }
 func (value *APLValueCompare) GetBool(sim *Simulation) bool {
-	switch value.lhs.Type() {
-	case proto.APLValueType_ValueTypeBool:
+	// Resolved on first use rather than in Finalize: placeholder values settle their type
+	// during the finalize pass, and nothing here needs to care what order that happens in.
+	if value.kind == aplCompareUnresolved {
+		value.kind = aplCompareKindOf(value.lhs.Type())
+	}
+
+	switch value.kind {
+	case aplCompareBool:
 		switch value.op {
 		case proto.APLValueCompare_OpEq:
 			return value.lhs.GetBool(sim) == value.rhs.GetBool(sim)
 		case proto.APLValueCompare_OpNe:
 			return value.lhs.GetBool(sim) != value.rhs.GetBool(sim)
 		}
-	case proto.APLValueType_ValueTypeInt:
+	case aplCompareInt:
 		switch value.op {
 		case proto.APLValueCompare_OpEq:
 			return value.lhs.GetInt(sim) == value.rhs.GetInt(sim)
@@ -319,7 +357,7 @@ func (value *APLValueCompare) GetBool(sim *Simulation) bool {
 		case proto.APLValueCompare_OpGe:
 			return value.lhs.GetInt(sim) >= value.rhs.GetInt(sim)
 		}
-	case proto.APLValueType_ValueTypeFloat:
+	case aplCompareFloat:
 		switch value.op {
 		case proto.APLValueCompare_OpEq:
 			return value.lhs.GetFloat(sim) == value.rhs.GetFloat(sim)
@@ -334,7 +372,7 @@ func (value *APLValueCompare) GetBool(sim *Simulation) bool {
 		case proto.APLValueCompare_OpGe:
 			return value.lhs.GetFloat(sim) >= value.rhs.GetFloat(sim)
 		}
-	case proto.APLValueType_ValueTypeDuration:
+	case aplCompareDuration:
 		switch value.op {
 		case proto.APLValueCompare_OpEq:
 			return value.lhs.GetDuration(sim) == value.rhs.GetDuration(sim)
@@ -349,7 +387,7 @@ func (value *APLValueCompare) GetBool(sim *Simulation) bool {
 		case proto.APLValueCompare_OpGe:
 			return value.lhs.GetDuration(sim) >= value.rhs.GetDuration(sim)
 		}
-	case proto.APLValueType_ValueTypeString:
+	case aplCompareString:
 		switch value.op {
 		case proto.APLValueCompare_OpEq:
 			return value.lhs.GetString(sim) == value.rhs.GetString(sim)
@@ -576,6 +614,16 @@ func (value *APLValueAnd) Type() proto.APLValueType {
 	return proto.APLValueType_ValueTypeBool
 }
 func (value *APLValueAnd) GetBool(sim *Simulation) bool {
+	// Two and three operands cover nearly every And in a real rotation, and naming them lets the
+	// compiler drop the loop and its bounds checks. Evaluation order and short-circuiting are
+	// identical to the general case below.
+	switch len(value.vals) {
+	case 2:
+		return value.vals[0].GetBool(sim) && value.vals[1].GetBool(sim)
+	case 3:
+		return value.vals[0].GetBool(sim) && value.vals[1].GetBool(sim) && value.vals[2].GetBool(sim)
+	}
+
 	for _, val := range value.vals {
 		if !val.GetBool(sim) {
 			return false
@@ -599,6 +647,14 @@ func (value *APLValueOr) Type() proto.APLValueType {
 	return proto.APLValueType_ValueTypeBool
 }
 func (value *APLValueOr) GetBool(sim *Simulation) bool {
+	// Same shape as And above, for the same reason.
+	switch len(value.vals) {
+	case 2:
+		return value.vals[0].GetBool(sim) || value.vals[1].GetBool(sim)
+	case 3:
+		return value.vals[0].GetBool(sim) || value.vals[1].GetBool(sim) || value.vals[2].GetBool(sim)
+	}
+
 	for _, val := range value.vals {
 		if val.GetBool(sim) {
 			return true

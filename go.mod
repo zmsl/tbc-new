@@ -2,7 +2,7 @@ module github.com/wowsims/tbc
 
 go 1.25.0
 
-toolchain go1.25.4
+toolchain go1.27.1
 
 require (
 	github.com/alecthomas/participle/v2 v2.1.4

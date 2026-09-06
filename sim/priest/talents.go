@@ -259,10 +259,12 @@ func (priest *Priest) applyInnerFocus() {
 		Duration: time.Hour,
 		OnGain: func(aura *core.Aura, sim *core.Simulation) {
 			aura.Unit.PseudoStats.SpellCostPercentModifier -= 100
+			aura.Unit.InvalidateSpellCosts()
 			critMod.Activate()
 		},
 		OnExpire: func(aura *core.Aura, sim *core.Simulation) {
 			aura.Unit.PseudoStats.SpellCostPercentModifier += 100
+			aura.Unit.InvalidateSpellCosts()
 			critMod.Deactivate()
 			innerFocusSpell.CD.Use(sim)
 		},

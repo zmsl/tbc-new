@@ -2251,10 +2251,20 @@
 			"feature_toggles": {
 				"show_threat_metrics": "Show Threat/Tank Options",
 				"show_experimental": "Show Experimental",
-				"show_quick_swap": "Show quick swap interface"
+				"show_quick_swap": "Show quick swap interface",
+				"allow_prerelease": {
+					"label": "Offer Pre-release Builds",
+					"tooltip": "Include release candidates when checking for updates. These are test builds published ahead of a stable release: newer, and more likely to have something wrong with them. Desktop app only."
+				}
 			},
 			"use_multiple_cpu_cores": {
-				"label": "Use Multiple CPU Cores"
+				"label": "Use Multiple CPU Cores",
+				"tooltip": "Use web workers to spread sim workload over multiple CPU cores.",
+				"memory_warning": "Every worker keeps its own copy of the sim and the item database, so a high count can use a lot of memory. If a sim never finishes because RAM ran out, choose a lower number.",
+				"unlock_all": {
+					"label": "Unlock All CPU Cores",
+					"tooltip": "Use every core this machine reports ({{cores}}) instead of the cautious default, and keep following the core count on whatever machine you open the sim on. Faster, at the cost of memory."
+				}
 			},
 			"restore_defaults": {
 				"button": "Restore Defaults",

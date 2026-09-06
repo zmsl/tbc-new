@@ -54,4 +54,8 @@ contextBridge.exposeInMainWorld('wowsimsDesktop', {
 
 	// Quits and installs. Only meaningful after onUpdateReady has fired.
 	installUpdate: () => ipcRenderer.invoke('wowsims:install-update'),
+
+	// Opts in to release candidates. Push the current value once at startup and again on every
+	// change: the main process does not persist it, so the renderer is the source of truth.
+	setAllowPrerelease: allow => ipcRenderer.invoke('wowsims:set-allow-prerelease', allow),
 });

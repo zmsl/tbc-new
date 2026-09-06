@@ -3,7 +3,11 @@ on:
   issues:
     types: [opened]
 jobs:
+  # Upstream only. This posts to wowsims' Discord, which a fork has no reason to notify, and it
+  # runs a third-party action from a moving branch (@master) with a webhook secret in scope --
+  # so the guard also stops a fork executing whatever that branch happens to point at today.
   send_webhook:
+    if: github.repository == 'wowsims/tbc-new'
     runs-on: ubuntu-latest
     steps:
       - name: Send webhook

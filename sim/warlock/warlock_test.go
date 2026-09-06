@@ -88,3 +88,47 @@ func TestDestruction(t *testing.T) {
 		},
 	}))
 }
+
+// Pet + dot coverage for the perf harness: the warlock drives a second unit through the same
+// event loop, which no other benchmarked spec does. Mirrors TestAffliction above.
+func benchmarkRequest() *proto.RaidSimRequest {
+	return &proto.RaidSimRequest{
+		Raid: core.SinglePlayerRaidProto(
+			&proto.Player{
+				Class:         proto.Class_ClassWarlock,
+				Race:          proto.Race_RaceOrc,
+				TalentsString: "05022221112351055003--50500051220001",
+				Equipment:     core.GetGearSet("../../ui/warlock/dps/gear_sets", "preraid").GearSet,
+				Spec: &proto.Player_Warlock{
+					Warlock: &proto.Warlock{
+						Options: &proto.Warlock_Options{
+							ClassOptions: &proto.WarlockOptions{
+								Summon:          proto.WarlockOptions_Imp,
+								SacrificeSummon: false,
+								Armor:           proto.WarlockOptions_FelArmor,
+								CurseOptions:    proto.WarlockOptions_Elements,
+							},
+						},
+					},
+				},
+				Rotation: core.GetAplRotation("../../ui/warlock/dps/apls", "affliction").Rotation,
+			},
+			nil, nil, nil,
+		),
+		Encounter: &proto.Encounter{
+			Duration: 300,
+			Targets:  []*proto.Target{core.NewDefaultTarget()},
+		},
+		SimOptions: core.AverageDefaultSimTestOptions,
+	}
+}
+
+// Setup plus one iteration. Dominated by NewEnvironment; tracks the cost paid once per RunSim.
+func BenchmarkSimulate(b *testing.B) {
+	core.RaidBenchmark(b, benchmarkRequest())
+}
+
+// The event loop alone, with setup amortized away.
+func BenchmarkIteration(b *testing.B) {
+	core.RaidIterationBenchmark(b, benchmarkRequest())
+}

@@ -682,6 +682,14 @@ func (unit *Unit) addUniversalStatDependencies() {
 	unit.AddStatDependency(stats.SpellCritRating, stats.SpellCritPercent, 1/SpellCritRatingPerCritPercent)
 }
 
+// InvalidateSpellCosts drops every cached spell cost on this unit. PseudoStats.SpellCostPercentModifier
+// feeds every spell's cost at once, so changing it has to invalidate all of them rather than one.
+func (unit *Unit) InvalidateSpellCosts() {
+	for _, spell := range unit.Spellbook {
+		spell.Cost.InvalidateCache()
+	}
+}
+
 func (unit *Unit) finalize() {
 	if unit.Env.IsFinalized() {
 		panic("Unit already finalized!")

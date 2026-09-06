@@ -25,6 +25,10 @@ mcp/dist/
 
 # temporary files
 *.results.tmp
+
+# Performance snapshots and profiles from tools/perf. Machine-specific by nature: a timing from
+# one laptop says nothing on another, so these are never shared through git.
+/perf/
 package.json.tmp
 .stylelintcache
 
@@ -62,5 +66,8 @@ mcp/internal/presets/files/*
 
 # electron desktop shell
 desktop/node_modules
-desktop/build/
+# Generated at build time: the app icon is copied in from assets/, and the sidecar binaries are
+# compiled by the makefile. installer.nsh is hand-written and has to survive.
+desktop/build/*
+!desktop/build/installer.nsh
 desktop-dist/

@@ -500,6 +500,7 @@ func (spell *Spell) finalize() {
 }
 
 func (spell *Spell) reset(sim *Simulation) {
+	spell.Cost.InvalidateCache()
 	for i := range spell.splitSpellMetrics {
 		for j := range spell.SpellMetrics {
 			spell.splitSpellMetrics[i][j] = SpellMetrics{}
@@ -808,7 +809,26 @@ type SpellCost struct {
 	PercentModifier         float64 // Multiplier for cost, as of MoP a float
 	AdditivePercentModifier float64 // Additive pct cost bucket: defaults to 1, additive pct mods sum into it
 	spell                   *Spell
+
+	// Cached result of GetCurrentCost. APL conditions read spell costs constantly -- the feral
+	// cat priority list alone reads one 25 times per rotation decision -- and the inputs move
+	// only when a spell modifier is applied or removed, or when the unit's
+	// SpellCostPercentModifier does. What the cache saves is not the arithmetic, which is
+	// trivial, but the walk out to spell.Unit.PseudoStats that the arithmetic needs: two
+	// pointer hops into large structs, once per read, across every spell in the list.
+	cachedCost   float64
+	costIsCached bool
+
 	ResourceCostImpl
+}
+
+// InvalidateCache marks the cached current cost stale. Call it after changing anything
+// ApplyCostModifiers reads; a missed call leaves the spell quoting a price it no longer has.
+// Safe on a nil receiver, because a spell without a resource cost has no SpellCost at all.
+func (sc *SpellCost) InvalidateCache() {
+	if sc != nil {
+		sc.costIsCached = false
+	}
 }
 
 func (sc *SpellCost) ApplyCostModifiers(cost int32) float64 {
@@ -820,7 +840,11 @@ func (sc *SpellCost) ApplyCostModifiers(cost int32) float64 {
 
 // Get power cost after all modifiers.
 func (sc *SpellCost) GetCurrentCost() float64 {
-	return sc.ApplyCostModifiers(sc.BaseCost)
+	if !sc.costIsCached {
+		sc.cachedCost = sc.ApplyCostModifiers(sc.BaseCost)
+		sc.costIsCached = true
+	}
+	return sc.cachedCost
 }
 
 func (spell *Spell) IssueRefund(sim *Simulation) {

@@ -1647,11 +1647,13 @@ func PowerInfusionAura(char *Character, actionTag int32) *Aura {
 		OnGain: func(ee *ExclusiveEffect, sim *Simulation) {
 			if ee.Aura.Unit.HasManaBar() {
 				ee.Aura.Unit.PseudoStats.SpellCostPercentModifier -= 20
+				ee.Aura.Unit.InvalidateSpellCosts()
 			}
 		},
 		OnExpire: func(ee *ExclusiveEffect, sim *Simulation) {
 			if ee.Aura.Unit.HasManaBar() {
 				ee.Aura.Unit.PseudoStats.SpellCostPercentModifier += 20
+				ee.Aura.Unit.InvalidateSpellCosts()
 			}
 		},
 	})

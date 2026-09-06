@@ -108,10 +108,15 @@ host_%: $(OUT_DIR) node_modules
 wasm: $(OUT_DIR)/lib.wasm
 
 # Builds the generic .wasm, with all items included.
+#
+# -s -w matches the native release builds. It drops the symbol table and DWARF, which is worth
+# 0.8MB of the first thing every visitor downloads, and costs nothing at runtime: Go tracebacks
+# read pclntab, which the linker keeps regardless, so the panic reports runSim sends back to the
+# UI still name their functions.
 WASM_FEATURES := --enable-sign-ext --enable-nontrapping-float-to-int --enable-mutable-globals --enable-bulk-memory
 $(OUT_DIR)/lib.wasm: sim/wasm/* sim/core/proto/api.pb.go $(filter-out sim/core/items/all_items.go, $(call rwildcard,sim,*.go))
 	@echo "Starting webassembly compile now..."
-	@if GOWASM=satconv,signext GOOS=js GOARCH=wasm go build -o ./$(OUT_DIR)/lib.wasm ./sim/wasm/; then \
+	@if GOWASM=satconv,signext GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o ./$(OUT_DIR)/lib.wasm ./sim/wasm/; then \
 		printf "\033[1;32mWASM compile successful.\033[0m\n"; \
 	else \
 		printf "\033[1;31mWASM COMPILE FAILED\033[0m\n"; \
@@ -406,10 +411,51 @@ sim/core/items/all_items.go: $(call rwildcard,tools/database,*.go) $(call rwildc
 test: $(OUT_DIR)/lib.wasm binary_dist/dist.go
 	GOARCH=amd64 go test --tags=with_db ./sim/...
 
+# Promotes the results a test run just produced into the checked-in golden files.
+#
+# Moves rather than copies, so a stale .results.tmp -- left by an interrupted run, or by a run at
+# a non-standard iteration count -- cannot be promoted later by an unrelated update.
+#
+# A golden with no fresh .tmp beside it is kept and reported rather than deleted. The previous
+# version deleted every .results first, so a partial or crashed test run silently destroyed the
+# goldens for every spec that did not get as far as writing one. Obsolete goldens now have to be
+# removed by hand, which is the rarer and much safer mistake to have to correct.
 .PHONY: update-tests
 update-tests:
-	find . -name "*.results" -type f -delete
-	find . -name "*.results.tmp" -exec bash -c 'cp "$$1" "$${1%.results.tmp}".results' _ {} \;
+	@if [ -z "$$(find . -name '*.results.tmp')" ]; then \
+	  echo "No *.results.tmp files found -- run 'make test' first."; \
+	  exit 1; \
+	fi
+	@find . -name "*.results" -type f | while read -r golden; do \
+	  test -f "$$golden.tmp" || echo "keeping $$golden (no fresh results -- did that test run?)"; \
+	done
+	find . -name "*.results.tmp" -exec bash -c 'mv "$$1" "$${1%.results.tmp}".results' _ {} \;
+
+# Performance harness. Take a baseline before changing anything, then compare against it:
+#
+#   make perf-baseline          # snapshot the tree as it stands
+#   ... make the change ...
+#   make perf-compare           # timings via benchstat, plus a DPS equivalence check
+#
+# PERF_LABEL names the snapshot under perf/ (gitignored), so several can coexist.
+PERF_LABEL ?= current
+
+.PHONY: perf-baseline
+perf-baseline:
+	tools/perf/capture.sh baseline
+
+.PHONY: perf-snapshot
+perf-snapshot:
+	tools/perf/capture.sh $(PERF_LABEL)
+
+.PHONY: perf-compare
+perf-compare: perf-snapshot
+	tools/perf/compare.sh baseline $(PERF_LABEL)
+
+# Regenerates the merged CPU profile the optimization work is aimed at, and the one PGO consumes.
+.PHONY: perf-profile
+perf-profile:
+	tools/perf/profile.sh
 
 .PHONY: fmt
 fmt: tsfmt

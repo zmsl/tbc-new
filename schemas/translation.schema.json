@@ -7917,20 +7917,52 @@
 								},
 								"show_quick_swap": {
 									"type": "string"
+								},
+								"allow_prerelease": {
+									"type": "object",
+									"properties": {
+										"label": {
+											"type": "string"
+										},
+										"tooltip": {
+											"type": "string"
+										}
+									},
+									"additionalProperties": false,
+									"required": ["label", "tooltip"]
 								}
 							},
 							"additionalProperties": false,
-							"required": ["show_threat_metrics", "show_experimental", "show_quick_swap"]
+							"required": ["show_threat_metrics", "show_experimental", "show_quick_swap", "allow_prerelease"]
 						},
 						"use_multiple_cpu_cores": {
 							"type": "object",
 							"properties": {
 								"label": {
 									"type": "string"
+								},
+								"tooltip": {
+									"type": "string"
+								},
+								"memory_warning": {
+									"type": "string"
+								},
+								"unlock_all": {
+									"type": "object",
+									"properties": {
+										"label": {
+											"type": "string"
+										},
+										"tooltip": {
+											"type": "string"
+										}
+									},
+									"additionalProperties": false,
+									"required": ["label", "tooltip"]
 								}
 							},
 							"additionalProperties": false,
-							"required": ["label"]
+							"required": ["label", "tooltip", "memory_warning", "unlock_all"]
 						},
 						"restore_defaults": {
 							"type": "object",

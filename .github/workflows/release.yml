@@ -33,7 +33,7 @@ jobs:
             - name: Install Go
               uses: actions/setup-go@v6
               with:
-                  go-version: 1.25.x
+                  go-version: 1.27.x
 
             - name: Install Protoc
               uses: arduino/setup-protoc@v3
@@ -64,13 +64,18 @@ jobs:
               env:
                   TAG: ${{ github.event.inputs.tag }}
 
+            # A tag carrying a semver prerelease part (v0.0.132-rc1) is published as a
+            # prerelease and does not become Latest. That keeps a test build off the download
+            # page and out of the desktop updater, which ignores prereleases unless the app
+            # opts in -- desktop/main.js does not.
             - name: Release
               uses: ncipollo/release-action@v1
               with:
                   commit: ${{ github.event.inputs.ref }}
                   tag: ${{ github.event.inputs.tag }}
                   generateReleaseNotes: true
-                  makeLatest: true
+                  prerelease: ${{ contains(github.event.inputs.tag, '-') }}
+                  makeLatest: ${{ !contains(github.event.inputs.tag, '-') }}
                   artifactErrorsFailBuild: true
                   artifacts: |
                       wowsimcli-amd64-linux.zip
