@@ -67,6 +67,20 @@ So: treat anything under ~10% from two separate snapshots as unproven. To settle
 run both builds back to back in one sitting with `-count 12` or more, and read the p-value rather
 than the percentage.
 
+## Concurrency
+
+```sh
+tools/perf/contention.sh 8
+```
+
+Everything else here measures one sim on one core, which is not how anyone runs it. This runs N
+sims as separate single-core processes and reports what they lose to each other, alongside an
+arithmetic control with no working set so the CPU's all-core turbo drop can be subtracted from
+the memory-system cost.
+
+As measured, 8-way costs ~30% of which ~26% is memory. Read the 8-way number: at 4 processes the
+result is noisy enough (9-13% across runs) to mislead.
+
 ## Profiling
 
 ```sh
