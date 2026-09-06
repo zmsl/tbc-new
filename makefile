@@ -58,8 +58,16 @@ clean:
 	  node_modules \
 	  desktop-dist \
 	  desktop/build \
-	  desktop/node_modules
+	  desktop/node_modules \
+	  wowsimmcp \
+	  wowsimmcp.exe \
+	  wowsims-tbc.mcpb \
+	  mcp/dist
 	find . -name "*.results.tmp" -type f -delete
+# The presets are copied out of ui/ by mcp-presets, so they are build output like the rest.
+# The glob leaves .gitkeep alone -- it does not match dotfiles -- which matters because that
+# one file is tracked, and a clean that deleted it would leave the working tree dirty.
+	rm -rf $(MCP_PRESETS)/*
 
 ui/core/proto/api.ts: proto/*.proto node_modules
 	npx protoc --ts_opt generate_dependencies --ts_out ui/core/proto --proto_path proto proto/api.proto
