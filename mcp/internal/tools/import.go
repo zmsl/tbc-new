@@ -46,7 +46,7 @@ type importAddonInput struct {
 type importAddonOutput struct {
 	Link    string          `json:"link" jsonschema:"share link for the imported character"`
 	Summary settingsSummary `json:"summary" jsonschema:"what was imported"`
-	Pool    []gearSlot      `json:"pool,omitempty" jsonschema:"items from the bags export, as candidates to try against the equipped set"`
+	Pool    []poolItem      `json:"pool,omitempty" jsonschema:"items from the bags export, as candidates to try against the equipped set"`
 	Notes   []string        `json:"notes,omitempty" jsonschema:"anything that had to be assumed or could not be imported"`
 }
 
@@ -58,6 +58,9 @@ func importAddon(config engine.Config) spec.Entry {
 		Details: "This is how a real character gets into the simulator: gear, gems, enchants, talents, race and\n" +
 			"professions exactly as they are in game. Pass the resulting link to sim_run or\n" +
 			"sim_compare_batch.\n\n" +
+			"A bags export turns into `pool`: the candidates to try against what is worn. Those items are\n" +
+			"usually bare, so simulate them with gems and an enchant supplied rather than as they sit in\n" +
+			"the bag, or the comparison understates every one of them.\n\n" +
 			"Everything the export does not carry -- buffs, consumables, the encounter -- is filled in with\n" +
 			"the same raid defaults the website uses, and listed in notes.",
 		Examples: []spec.Example{
@@ -215,24 +218,40 @@ func equipmentFromAddon(gear addonGear) (*proto.EquipmentSpec, error) {
 	return equipment, nil
 }
 
+// A candidate out of the bags, as opposed to something being worn: it has no slot of its own yet,
+// and what matters is where it could go and what it would need before it was worth wearing.
+type poolItem struct {
+	ItemID  int32    `json:"itemId"`
+	Name    string   `json:"name,omitempty"`
+	Slots   []string `json:"slots,omitempty" jsonschema:"every slot this could be equipped in. Rings and trinkets have two, and both are worth trying."`
+	Sockets []string `json:"sockets,omitempty" jsonschema:"empty gem sockets. An item out of the bags is usually unenchanted and ungemmed, so compare it with gems and an enchant supplied or the comparison understates it."`
+	Enchant int32    `json:"enchant,omitempty" jsonschema:"the enchant already on it, if any"`
+	Gems    []int32  `json:"gems,omitempty" jsonschema:"gems already socketed in it, if any"`
+	Phase   int32    `json:"phase,omitempty"`
+}
+
 // The bags export is a flat EquipmentSpec used as a candidate pool rather than a worn set, so
 // slot positions carry no meaning here -- only the items do.
-func poolFromBags(raw string) ([]gearSlot, error) {
+func poolFromBags(raw string) ([]poolItem, error) {
 	var gear addonGear
 	if err := json.Unmarshal([]byte(raw), &gear); err != nil {
 		return nil, fmt.Errorf("this does not look like a bags export: %w", err)
 	}
 
-	var pool []gearSlot
+	var pool []poolItem
 	for _, item := range gear.Items {
 		if item == nil || item.ID == 0 {
 			continue
 		}
-		entry := gearSlot{ItemID: item.ID, Enchant: item.Enchant, Gems: item.Gems}
+		entry := poolItem{ItemID: item.ID, Enchant: item.Enchant, Gems: item.Gems}
 		if known, ok := engine.Item(item.ID); ok {
 			entry.Name = known.Name
-			if slots := core.EligibleItemSlots(known); len(slots) > 0 {
-				entry.Slot = trimEnum(slots[0].String(), "ItemSlot")
+			entry.Phase = known.Phase
+			for _, slot := range core.EligibleItemSlots(known) {
+				entry.Slots = append(entry.Slots, trimEnum(slot.String(), "ItemSlot"))
+			}
+			for _, socket := range known.GemSockets {
+				entry.Sockets = append(entry.Sockets, trimEnum(socket.String(), "GemColor"))
 			}
 		}
 		pool = append(pool, entry)

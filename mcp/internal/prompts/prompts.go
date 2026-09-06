@@ -81,9 +81,10 @@ func bestInBags() spec.Entry {
 				"1. Ask for their WowSimsExporter export if you do not have it, and for the bags export too if they want items out of their bags considered. Import both with `import_addon`.\n"+
 				"2. `sim_run` the imported set as it stands. That is the baseline, and the number they will compare everything against.\n"+
 				"3. `sim_stat_weights` on the baseline, then score every item in the pool by those weights to decide what is worth simulating. Ignore items that are clearly worse than what is already equipped in that slot.\n"+
-				"4. `sim_compare_batch` the promising swaps, one slot at a time, using the `items` field so only that slot changes. Keep whatever wins and carry it into the next comparison.\n"+
-				"5. `gear_validate` the result: two unique trinkets or a dead meta gem would make the answer wrong in a way the simulation itself will not catch.\n"+
-				"6. Report the upgrade path in order of value -- what to change, what it gains, and what it costs -- and give them the share link so they can open it in the sim.\n\n"+
+				"4. `sim_compare_batch` the promising swaps, one slot at a time, using the `items` field so only that slot changes. Supply gems and an enchant with each candidate: an item out of the bags is bare, and simulating it that way understates every one of them. `pool` lists each item's empty sockets and every slot it could go in -- rings and trinkets have two, and both are worth trying.\n"+
+				"5. Keep whatever wins and carry it into the next comparison. When several slots improve, read the `combined` row: it applies them together and says whether they still add up.\n"+
+				"6. `gear_validate` the result: two unique trinkets or a dead meta gem would make the answer wrong in a way the simulation itself will not catch.\n"+
+				"7. Report the upgrade path in order of value -- what to change, what it gains, and what it costs -- and give them the share link so they can open it in the sim.\n\n"+
 				"If nothing in the pool beats what they are wearing, say that plainly.",
 				specHint)
 		},

@@ -1524,6 +1524,10 @@ This is how a real character gets into the simulator: gear, gems, enchants, tale
 professions exactly as they are in game. Pass the resulting link to sim_run or
 sim_compare_batch.
 
+A bags export turns into `pool`: the candidates to try against what is worn. Those items are
+usually bare, so simulate them with gems and an enchant supplied rather than as they sit in
+the bag, or the comparison understates every one of them.
+
 Everything the export does not carry -- buffs, consumables, the encounter -- is filled in with
 the same raid defaults the website uses, and listed in notes.
 
@@ -1688,23 +1692,37 @@ Read-only.
       "items": {
         "type": "object",
         "properties": {
-          "slot": {
-            "type": "string",
-            "description": "equipment slot, e.g. Head or MainHand"
-          },
           "itemId": {
             "type": "integer",
-            "description": "the item's id",
             "minimum": -2147483648,
             "maximum": 2147483647
           },
           "name": {
-            "type": "string",
-            "description": "the item's name, when the item database is loaded"
+            "type": "string"
+          },
+          "slots": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "every slot this could be equipped in. Rings and trinkets have two, and both are worth trying."
+          },
+          "sockets": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "empty gem sockets. An item out of the bags is usually unenchanted and ungemmed, so compare it with gems and an enchant supplied or the comparison understates it."
           },
           "enchant": {
             "type": "integer",
-            "description": "enchant effect id, if enchanted",
+            "description": "the enchant already on it, if any",
             "minimum": -2147483648,
             "maximum": 2147483647
           },
@@ -1718,11 +1736,15 @@ Read-only.
               "minimum": -2147483648,
               "maximum": 2147483647
             },
-            "description": "socketed gem ids"
+            "description": "gems already socketed in it, if any"
+          },
+          "phase": {
+            "type": "integer",
+            "minimum": -2147483648,
+            "maximum": 2147483647
           }
         },
         "required": [
-          "slot",
           "itemId"
         ],
         "additionalProperties": false
@@ -2562,7 +2584,7 @@ Read-only.
                 },
                 "enchant": {
                   "type": "integer",
-                  "description": "enchant effect id to apply. Omit to keep the slot's current enchant.",
+                  "description": "enchant effect id to apply. Changing the item clears whatever was in the slot, so an item worth wearing needs its enchant supplied here or it is simulated bare.",
                   "minimum": -2147483648,
                   "maximum": 2147483647
                 },
@@ -2576,7 +2598,7 @@ Read-only.
                     "minimum": -2147483648,
                     "maximum": 2147483647
                   },
-                  "description": "gem ids to socket. Omit to keep the current gems."
+                  "description": "gem ids to socket. Changing the item clears the old gems, since they cannot be assumed to fit; supply the new ones or the item is simulated with empty sockets."
                 }
               },
               "required": [
@@ -3534,9 +3556,10 @@ Work out the best gear the player can put together from what they already own.
 1. Ask for their WowSimsExporter export if you do not have it, and for the bags export too if they want items out of their bags considered. Import both with `import_addon`.
 2. `sim_run` the imported set as it stands. That is the baseline, and the number they will compare everything against.
 3. `sim_stat_weights` on the baseline, then score every item in the pool by those weights to decide what is worth simulating. Ignore items that are clearly worse than what is already equipped in that slot.
-4. `sim_compare_batch` the promising swaps, one slot at a time, using the `items` field so only that slot changes. Keep whatever wins and carry it into the next comparison.
-5. `gear_validate` the result: two unique trinkets or a dead meta gem would make the answer wrong in a way the simulation itself will not catch.
-6. Report the upgrade path in order of value -- what to change, what it gains, and what it costs -- and give them the share link so they can open it in the sim.
+4. `sim_compare_batch` the promising swaps, one slot at a time, using the `items` field so only that slot changes. Supply gems and an enchant with each candidate: an item out of the bags is bare, and simulating it that way understates every one of them. `pool` lists each item's empty sockets and every slot it could go in -- rings and trinkets have two, and both are worth trying.
+5. Keep whatever wins and carry it into the next comparison. When several slots improve, read the `combined` row: it applies them together and says whether they still add up.
+6. `gear_validate` the result: two unique trinkets or a dead meta gem would make the answer wrong in a way the simulation itself will not catch.
+7. Report the upgrade path in order of value -- what to change, what it gains, and what it costs -- and give them the share link so they can open it in the sim.
 
 If nothing in the pool beats what they are wearing, say that plainly.
 ```

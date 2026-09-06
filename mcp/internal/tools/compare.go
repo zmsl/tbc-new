@@ -38,8 +38,8 @@ type comparisonVariant struct {
 type itemChange struct {
 	Slot    string  `json:"slot" jsonschema:"the slot to change, e.g. Trinket1 or MainHand"`
 	ItemID  int32   `json:"itemId" jsonschema:"the item to equip. Zero empties the slot."`
-	Enchant int32   `json:"enchant,omitempty" jsonschema:"enchant effect id to apply. Omit to keep the slot's current enchant."`
-	Gems    []int32 `json:"gems,omitempty" jsonschema:"gem ids to socket. Omit to keep the current gems."`
+	Enchant int32   `json:"enchant,omitempty" jsonschema:"enchant effect id to apply. Changing the item clears whatever was in the slot, so an item worth wearing needs its enchant supplied here or it is simulated bare."`
+	Gems    []int32 `json:"gems,omitempty" jsonschema:"gem ids to socket. Changing the item clears the old gems, since they cannot be assumed to fit; supply the new ones or the item is simulated with empty sockets."`
 }
 
 type compareInput struct {

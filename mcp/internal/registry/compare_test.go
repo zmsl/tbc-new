@@ -207,9 +207,10 @@ func TestImportAddon(t *testing.T) {
 		Link    string          `json:"link"`
 		Summary settingsSummary `json:"summary"`
 		Pool    []struct {
-			ItemID int32  `json:"itemId"`
-			Name   string `json:"name"`
-			Slot   string `json:"slot"`
+			ItemID  int32    `json:"itemId"`
+			Name    string   `json:"name"`
+			Slots   []string `json:"slots"`
+			Sockets []string `json:"sockets"`
 		} `json:"pool"`
 		Notes []string `json:"notes"`
 	}](t, session, "import_addon", map[string]any{
@@ -247,6 +248,13 @@ func TestImportAddon(t *testing.T) {
 	for _, item := range output.Pool {
 		if item.Name == "" {
 			t.Errorf("pool item %d was not resolved against the database", item.ItemID)
+		}
+		// A candidate with nowhere to go cannot be tried, and a ring or trinket has two homes.
+		if len(item.Slots) == 0 {
+			t.Errorf("%s reports no slot it could be equipped in", item.Name)
+		}
+		if item.ItemID == 29370 && len(item.Slots) != 2 {
+			t.Errorf("a trinket should offer both trinket slots, got %v", item.Slots)
 		}
 	}
 
