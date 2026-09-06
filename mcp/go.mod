@@ -2,6 +2,8 @@ module github.com/wowsims/tbc/mcp
 
 go 1.25.0
 
+toolchain go1.27.1
+
 require (
 	github.com/google/jsonschema-go v0.4.3
 	github.com/wowsims/tbc v0.0.0
