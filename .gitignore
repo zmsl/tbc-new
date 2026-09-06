@@ -20,7 +20,7 @@ sim/web/__debug_bin
 /wowsimcli*
 /wowsimtbc*
 /wowsimmcp*
-/wowsims-tbc.mcpb
+*.mcpb
 mcp/dist/
 
 # temporary files
