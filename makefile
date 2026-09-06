@@ -411,10 +411,25 @@ sim/core/items/all_items.go: $(call rwildcard,tools/database,*.go) $(call rwildc
 test: $(OUT_DIR)/lib.wasm binary_dist/dist.go
 	GOARCH=amd64 go test --tags=with_db ./sim/...
 
+# Promotes the results a test run just produced into the checked-in golden files.
+#
+# Moves rather than copies, so a stale .results.tmp -- left by an interrupted run, or by a run at
+# a non-standard iteration count -- cannot be promoted later by an unrelated update.
+#
+# A golden with no fresh .tmp beside it is kept and reported rather than deleted. The previous
+# version deleted every .results first, so a partial or crashed test run silently destroyed the
+# goldens for every spec that did not get as far as writing one. Obsolete goldens now have to be
+# removed by hand, which is the rarer and much safer mistake to have to correct.
 .PHONY: update-tests
 update-tests:
-	find . -name "*.results" -type f -delete
-	find . -name "*.results.tmp" -exec bash -c 'cp "$$1" "$${1%.results.tmp}".results' _ {} \;
+	@if [ -z "$$(find . -name '*.results.tmp')" ]; then \
+	  echo "No *.results.tmp files found -- run 'make test' first."; \
+	  exit 1; \
+	fi
+	@find . -name "*.results" -type f | while read -r golden; do \
+	  test -f "$$golden.tmp" || echo "keeping $$golden (no fresh results -- did that test run?)"; \
+	done
+	find . -name "*.results.tmp" -exec bash -c 'mv "$$1" "$${1%.results.tmp}".results' _ {} \;
 
 # Performance harness. Take a baseline before changing anything, then compare against it:
 #

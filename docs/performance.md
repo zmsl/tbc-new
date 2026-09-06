@@ -95,6 +95,17 @@ nothing, and the larger code it generates costs instruction cache.
 event-loop profile. It shows up only in profiles dominated by environment construction, which is
 a setup cost, not a per-iteration one.
 
+### An ordering experiment that failed
+
+`APLAction.IsReady` evaluates `condition && impl.IsReady`. Since `CanCastOrQueue` is a pure
+predicate, the two can be swapped, and checking spell readiness first looked like it should skip
+whole condition trees for spells that are on cooldown or unaffordable.
+
+It made feral cat **41% slower** (p=0.002) and did nothing measurable for rogue. Conditions are
+on average *cheaper* than the readiness check, and they fail early far more often, so the
+existing order is already the better one. Recorded here because the argument for swapping is
+persuasive and wrong.
+
 ## Why not CUDA
 
 The question comes up because 10,000 iterations sounds like 10,000 independent tasks, which
@@ -155,9 +166,14 @@ machinery already exists -- `evalGeneration` (`sim/core/apl.go`) -- but it is wi
 variable references. A priority list routinely asks the same question from several entries in
 one pass, and each entry pays for it again.
 
-Environment construction is the other unclaimed cost: roughly 2.3ms per `RunSim` for feral cat,
-most of it resolving the APL's 168 spell references, paid once per concurrency split and dozens
-of times across a stat weight run.
+Environment construction is **not** worth chasing, which is worth writing down because it looks
+like it should be. It costs about 1.0ms per `RunSim` -- 0.75ms building the environment, of which
+roughly 60% is parsing the APL, plus 0.28ms of presim -- and it is paid once per `RunSim`, which
+means once per concurrency split and once per stat-weight sub-sim. Against a split running even a
+few hundred iterations at 3.5ms each, that is well under 1%. Reusing environments across splits
+was on the plan for this work and was dropped after measurement: it is the riskiest change
+available (shared mutable state leaking between splits produces wrong answers that still look
+plausible) in exchange for a fraction of a percent.
 
 ## The browser
 
