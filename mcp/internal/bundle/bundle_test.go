@@ -27,9 +27,9 @@ func entries(t *testing.T) []spec.Entry {
 	)
 }
 
-func render(t *testing.T) []byte {
+func render(t *testing.T, options bundle.Options) []byte {
 	t.Helper()
-	rendered, err := bundle.Manifest(entries(t))
+	rendered, err := bundle.Manifest(entries(t), options)
 	if err != nil {
 		t.Fatalf("render: %v", err)
 	}
@@ -44,56 +44,91 @@ func TestManifestIsUpToDate(t *testing.T) {
 		t.Fatalf("read committed manifest: %v (run `make mcp-bundle`)", err)
 	}
 
-	if string(committed) != string(render(t)) {
+	if string(committed) != string(render(t, bundle.Options{})) {
 		t.Error("mcp/mcpb/manifest.json is out of date; run `make mcp-bundle` and review the diff")
 	}
 }
 
-func TestManifestDescribesTheServer(t *testing.T) {
-	var parsed struct {
-		ManifestVersion string `json:"manifest_version"`
-		Version         string `json:"version"`
-		Server          struct {
-			Type       string `json:"type"`
-			EntryPoint string `json:"entry_point"`
-			MCPConfig  struct {
-				Command string   `json:"command"`
-				Args    []string `json:"args"`
-			} `json:"mcp_config"`
-		} `json:"server"`
-		Tools []struct {
-			Name        string `json:"name"`
-			Description string `json:"description"`
-		} `json:"tools"`
-		Prompts []struct {
-			Name string `json:"name"`
-			Text string `json:"text"`
-		} `json:"prompts"`
-		Compatibility struct {
-			Platforms []string `json:"platforms"`
-		} `json:"compatibility"`
-	}
-	if err := json.Unmarshal(render(t), &parsed); err != nil {
+// manifestShape is the part of a rendered manifest these tests read.
+type manifestShape struct {
+	ManifestVersion string `json:"manifest_version"`
+	Version         string `json:"version"`
+	Server          struct {
+		Type       string `json:"type"`
+		EntryPoint string `json:"entry_point"`
+		MCPConfig  struct {
+			Command string   `json:"command"`
+			Args    []string `json:"args"`
+		} `json:"mcp_config"`
+	} `json:"server"`
+	Tools []struct {
+		Name        string `json:"name"`
+		Description string `json:"description"`
+	} `json:"tools"`
+	Prompts []struct {
+		Name string `json:"name"`
+		Text string `json:"text"`
+	} `json:"prompts"`
+	Compatibility struct {
+		Platforms []string `json:"platforms"`
+	} `json:"compatibility"`
+}
+
+func decode(t *testing.T, options bundle.Options) manifestShape {
+	t.Helper()
+
+	var parsed manifestShape
+	if err := json.Unmarshal(render(t, options), &parsed); err != nil {
 		t.Fatalf("decode manifest: %v", err)
 	}
+	return parsed
+}
 
-	if parsed.Server.Type != "binary" || parsed.Server.EntryPoint != bundle.EntryPoint {
-		t.Errorf("server = %+v", parsed.Server)
-	}
-	// The binary carries its own database and presets, so a command with arguments would mean
-	// something is being looked for outside the bundle.
-	if len(parsed.Server.MCPConfig.Args) != 0 {
-		t.Errorf("the server takes arguments: %v", parsed.Server.MCPConfig.Args)
-	}
-	if !strings.HasPrefix(parsed.Server.MCPConfig.Command, "${__dirname}/") {
-		t.Errorf("command %q is not relative to the installed bundle", parsed.Server.MCPConfig.Command)
-	}
-	if len(parsed.Compatibility.Platforms) != 1 || parsed.Compatibility.Platforms[0] != "win32" {
-		t.Errorf("platforms = %v; the bundle carries a Windows binary only", parsed.Compatibility.Platforms)
-	}
+// A bundle carries one platform's binary, and Claude Desktop reads compatibility.platforms to
+// decide whether it can be installed at all, so a target that misdescribes itself either fails
+// to install or installs a binary the machine cannot run.
+func TestManifestDescribesEachTarget(t *testing.T) {
+	for _, target := range bundle.Targets {
+		t.Run(target.Name, func(t *testing.T) {
+			parsed := decode(t, bundle.Options{Target: target})
 
-	// Every registered tool and prompt has to appear, or the install dialog under-reports what the
-	// server can do.
+			if parsed.Server.Type != "binary" || parsed.Server.EntryPoint != target.EntryPoint {
+				t.Errorf("server = %+v, want entry point %q", parsed.Server, target.EntryPoint)
+			}
+			if len(parsed.Compatibility.Platforms) != 1 || parsed.Compatibility.Platforms[0] != target.Platform {
+				t.Errorf("platforms = %v, want [%s]", parsed.Compatibility.Platforms, target.Platform)
+			}
+			// The binary carries its own database and presets, so a command with arguments would
+			// mean something is being looked for outside the bundle.
+			if len(parsed.Server.MCPConfig.Args) != 0 {
+				t.Errorf("the server takes arguments: %v", parsed.Server.MCPConfig.Args)
+			}
+			if parsed.Server.MCPConfig.Command != "${__dirname}/"+target.EntryPoint {
+				t.Errorf("command %q does not point at this target's entry point", parsed.Server.MCPConfig.Command)
+			}
+			if !strings.HasPrefix(parsed.Server.MCPConfig.Command, "${__dirname}/") {
+				t.Errorf("command %q is not relative to the installed bundle", parsed.Server.MCPConfig.Command)
+			}
+		})
+	}
+}
+
+// Claude Desktop compares this field against what is installed to decide whether an update
+// exists, so a release has to be able to stamp its tag on it.
+func TestManifestVersionCanBeStamped(t *testing.T) {
+	if got := decode(t, bundle.Options{Version: "9.9.9"}).Version; got != "9.9.9" {
+		t.Errorf("stamped version = %q, want 9.9.9", got)
+	}
+	if got := decode(t, bundle.Options{}).Version; got != bundle.Version {
+		t.Errorf("default version = %q, want %q", got, bundle.Version)
+	}
+}
+
+// Every registered tool and prompt has to appear, or the install dialog under-reports what the
+// server can do.
+func TestManifestListsEveryDeclaration(t *testing.T) {
+	parsed := decode(t, bundle.Options{})
+
 	listed := map[string]bool{}
 	for _, tool := range parsed.Tools {
 		if tool.Description == "" {
@@ -116,6 +151,19 @@ func TestManifestDescribesTheServer(t *testing.T) {
 		}
 		if !listed[entry.ID()] {
 			t.Errorf("%s %q is registered but missing from the manifest", entry.Kind(), entry.ID())
+		}
+	}
+}
+
+// An unknown name has to fail rather than silently pack the default target's manifest next to
+// another platform's binary.
+func TestTargetByNameRejectsUnknown(t *testing.T) {
+	if _, ok := bundle.TargetByName("solaris"); ok {
+		t.Error("TargetByName accepted a target that is not published")
+	}
+	for _, target := range bundle.Targets {
+		if found, ok := bundle.TargetByName(target.Name); !ok || found != target {
+			t.Errorf("TargetByName(%q) = %+v, %v", target.Name, found, ok)
 		}
 	}
 }

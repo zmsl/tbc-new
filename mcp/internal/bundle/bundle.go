@@ -79,11 +79,66 @@ type compatibility struct {
 	Platforms []string `json:"platforms"`
 }
 
-// EntryPoint is where the packed bundle puts the server, relative to the bundle root.
-const EntryPoint = "server/wowsimmcp.exe"
+// A Target is one platform a bundle is built for. Claude Desktop reads compatibility.platforms
+// to decide whether a bundle can be installed at all, and the manifest names a single entry
+// point, so a bundle serves exactly one of these.
+//
+// One bundle for everything is not available: mcp_config.platform_overrides is keyed by platform
+// rather than architecture, so a single bundle cannot serve both Apple Silicon and Intel without
+// a lipo-fused universal binary, which would mean building on macOS purely to fuse two files.
+type Target struct {
+	// Name is what the makefile and the release artifact call this target.
+	Name string
+	// Platform is the manifest's compatibility value: darwin, win32 or linux.
+	Platform string
+	// EntryPoint is where the packed bundle puts the server, relative to the bundle root.
+	EntryPoint string
+}
+
+var (
+	Windows     = Target{Name: "windows", Platform: "win32", EntryPoint: "server/wowsimmcp.exe"}
+	DarwinArm64 = Target{Name: "arm64-darwin", Platform: "darwin", EntryPoint: "server/wowsimmcp"}
+	DarwinAmd64 = Target{Name: "amd64-darwin", Platform: "darwin", EntryPoint: "server/wowsimmcp"}
+)
+
+// Targets is every platform a bundle is published for. Windows is first because it is the
+// default, and the one the committed manifest describes.
+var Targets = []Target{Windows, DarwinArm64, DarwinAmd64}
+
+// TargetByName looks a target up by the name the makefile passes.
+func TargetByName(name string) (Target, bool) {
+	for _, target := range Targets {
+		if target.Name == name {
+			return target, true
+		}
+	}
+	return Target{}, false
+}
+
+// Options selects what a rendered manifest describes. The zero value renders the Windows
+// bundle at the version in this file, which is what the committed manifest holds.
+type Options struct {
+	Target Target
+	// Version overrides the constant above. A release stamps its tag here, because Claude
+	// Desktop compares this field to decide whether an installed bundle has an update; a
+	// version that never moved would mean nobody is ever offered one.
+	Version string
+}
+
+func (o Options) resolve() Options {
+	if o.Target.Platform == "" {
+		o.Target = Windows
+	}
+	if o.Version == "" {
+		o.Version = Version
+	}
+	return o
+}
 
 // Manifest renders the manifest for the given registry entries.
-func Manifest(entries []spec.Entry) ([]byte, error) {
+func Manifest(entries []spec.Entry, opts Options) ([]byte, error) {
+	opts = opts.resolve()
+
 	documents, err := spec.Docs(entries)
 	if err != nil {
 		return nil, err
@@ -93,7 +148,7 @@ func Manifest(entries []spec.Entry) ([]byte, error) {
 		ManifestVersion: ManifestVersion,
 		Name:            "wowsims-tbc",
 		DisplayName:     "WoW TBC Classic simulator",
-		Version:         Version,
+		Version:         opts.Version,
 		Description:     "Simulate WoW: The Burning Crusade Classic characters: gear, talents, rotations and encounters.",
 		LongDescription: longDescription,
 		Author:          author{Name: "wowsims", URL: "https://github.com/zmsl/tbc-new"},
@@ -103,16 +158,16 @@ func Manifest(entries []spec.Entry) ([]byte, error) {
 		Icon:            "icon.png",
 		Server: server{
 			Type:       "binary",
-			EntryPoint: EntryPoint,
+			EntryPoint: opts.Target.EntryPoint,
 			MCPConfig: mcpConfig{
 				// Everything the server needs -- the item database and the gear, rotation and talent
 				// presets -- is compiled into the binary, so it takes no arguments and needs no
 				// paths pointing anywhere.
-				Command: "${__dirname}/" + EntryPoint,
+				Command: "${__dirname}/" + opts.Target.EntryPoint,
 				Args:    []string{},
 			},
 		},
-		Compatibility: compatibility{Platforms: []string{"win32"}},
+		Compatibility: compatibility{Platforms: []string{opts.Target.Platform}},
 	}
 
 	for _, doc := range documents {

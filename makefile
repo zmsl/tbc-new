@@ -320,22 +320,22 @@ mcp-windows: sim/core/proto/api.pb.go mcp-presets
 mcp-test: sim/core/proto/api.pb.go mcp-presets
 	cd $(MCP_DIR) && GOARCH=amd64 go test --tags=with_db ./...
 
-MCP_BUNDLE_DIR := $(MCP_OUT)/mcpb
-MCP_BUNDLE    := $(MCP_OUT)/wowsims-tbc.mcpb
+# Packs the Claude Desktop bundles: a zip carrying the server and a manifest describing it,
+# which installs by being opened. One per platform, because a manifest names a single entry
+# point and Claude Desktop reads compatibility.platforms to decide whether it can install at all.
+#
+# Set MCPB_VERSION to stamp a version on the manifests. Claude Desktop compares that field
+# against what is installed to decide whether an update exists, so a release passes its tag and
+# a local build leaves it at the constant in mcp/internal/bundle.
+MCPB_VERSION ?=
 
-# Packs a Claude Desktop bundle: a zip carrying the server and a manifest describing it, which
-# installs by being opened. Windows only, because that is where Claude Desktop runs here and a
-# bundle should not carry binaries nobody has run.
 .PHONY: mcp-bundle
-mcp-bundle: mcp-windows
-	cd $(MCP_DIR) && go run --tags=with_db ./cmd/genmanifest
-	rm -rf $(MCP_BUNDLE_DIR) $(MCP_BUNDLE)
-	mkdir -p $(MCP_BUNDLE_DIR)/server
-	cp $(MCP_OUT)/wowsimmcp.exe $(MCP_BUNDLE_DIR)/server/
-	cp $(MCP_DIR)/mcpb/manifest.json $(MCP_BUNDLE_DIR)/
-	cp assets/favicon_io/android-chrome-512x512.png $(MCP_BUNDLE_DIR)/icon.png
-	cd $(MCP_BUNDLE_DIR) && zip -qr ../wowsims-tbc.mcpb .
-	@echo "packed $(MCP_BUNDLE) -- open it with Claude Desktop to install"
+mcp-bundle: sim/core/proto/api.pb.go mcp-presets
+	rm -rf $(MCP_OUT)/mcpb-* $(MCP_OUT)/*.mcpb
+	tools/mcp/pack_bundle.sh windows      windows amd64 $(MCP_OUT) $(MCPB_VERSION)
+	tools/mcp/pack_bundle.sh arm64-darwin darwin  arm64 $(MCP_OUT) $(MCPB_VERSION)
+	tools/mcp/pack_bundle.sh amd64-darwin darwin  amd64 $(MCP_OUT) $(MCPB_VERSION)
+	@echo "open one with Claude Desktop to install it"
 
 # Regenerates mcp/docs/TOOLS.md from the registry. Never edit that file by hand.
 .PHONY: mcp-docs
