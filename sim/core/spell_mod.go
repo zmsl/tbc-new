@@ -566,36 +566,42 @@ func onResetDamageDoneAdd(mod *SpellMod) {
 func applyPowerCostPercent(mod *SpellMod, spell *Spell) {
 	if spell.Cost != nil {
 		spell.Cost.PercentModifier *= (1 + mod.floatValue)
+		spell.Cost.InvalidateCache()
 	}
 }
 
 func removePowerCostPercent(mod *SpellMod, spell *Spell) {
 	if spell.Cost != nil {
 		spell.Cost.PercentModifier /= (1 + mod.floatValue)
+		spell.Cost.InvalidateCache()
 	}
 }
 
 func applyPowerCostPercentAdditive(mod *SpellMod, spell *Spell) {
 	if spell.Cost != nil {
 		spell.Cost.AdditivePercentModifier += mod.floatValue
+		spell.Cost.InvalidateCache()
 	}
 }
 
 func removePowerCostPercentAdditive(mod *SpellMod, spell *Spell) {
 	if spell.Cost != nil {
 		spell.Cost.AdditivePercentModifier -= mod.floatValue
+		spell.Cost.InvalidateCache()
 	}
 }
 
 func applyPowerCostFlat(mod *SpellMod, spell *Spell) {
 	if spell.Cost != nil {
 		spell.Cost.FlatModifier += mod.intValue
+		spell.Cost.InvalidateCache()
 	}
 }
 
 func removePowerCostFlat(mod *SpellMod, spell *Spell) {
 	if spell.Cost != nil {
 		spell.Cost.FlatModifier -= mod.intValue
+		spell.Cost.InvalidateCache()
 	}
 }
 

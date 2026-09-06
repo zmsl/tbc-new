@@ -128,10 +128,12 @@ func (mage *Mage) registerArcaneConcentration() {
 		OnGain: func(aura *core.Aura, sim *core.Simulation) {
 			mage.AddStatDynamic(sim, stats.SpellCritRating, bonusCrit)
 			aura.Unit.PseudoStats.SpellCostPercentModifier -= 100
+			aura.Unit.InvalidateSpellCosts()
 		},
 		OnExpire: func(aura *core.Aura, sim *core.Simulation) {
 			mage.AddStatDynamic(sim, stats.SpellCritRating, -bonusCrit)
 			aura.Unit.PseudoStats.SpellCostPercentModifier += 100
+			aura.Unit.InvalidateSpellCosts()
 		},
 		OnCastComplete: func(aura *core.Aura, sim *core.Simulation, spell *core.Spell) {
 			if spell.ClassSpellMask&MageSpellsAllDamaging == 0 {

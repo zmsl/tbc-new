@@ -83,11 +83,14 @@ type AuraReference struct {
 func (ar *AuraReference) Get() *Aura {
 	if ar.fixedAura != nil {
 		return ar.fixedAura
-	} else if ar.targetRef.Get() != nil {
-		return ar.allTargetAuras.Get(ar.targetRef.Get())
-	} else {
+	}
+	// Resolved once. This is called from APL conditions, which run on every rotation decision,
+	// and resolving the target twice doubled the work for no reason.
+	target := ar.targetRef.Get()
+	if target == nil {
 		return nil
 	}
+	return ar.allTargetAuras.Get(target)
 }
 
 func (ar *AuraReference) String() string {
