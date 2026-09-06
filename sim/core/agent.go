@@ -2,6 +2,7 @@ package core
 
 import (
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -149,6 +150,18 @@ type SpecSetter func(*proto.Player, interface{})
 var agentFactories = make(map[string]AgentFactory)
 var specSetters = make(map[string]SpecSetter)
 var configSpecs = make(map[string]proto.Spec)
+
+// RegisteredSpecs lists the specs RegisterAll has wired up, sorted by enum value. Callers
+// outside the engine -- the MCP server, tooling -- otherwise have no way to ask what this build
+// can actually simulate.
+func RegisteredSpecs() []proto.Spec {
+	specs := make([]proto.Spec, 0, len(configSpecs))
+	for _, spec := range configSpecs {
+		specs = append(specs, spec)
+	}
+	slices.Sort(specs)
+	return specs
+}
 
 func PlayerProtoToSpec(player *proto.Player) proto.Spec {
 	typeName := reflect.TypeOf(player.GetSpec()).Elem().Name()

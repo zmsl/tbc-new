@@ -261,6 +261,29 @@ desktop-preview-win: $(DESKTOP_DIR)/node_modules $(DESKTOP_ICON) desktop-sidecar
 desktop-dev: $(DESKTOP_DIR)/node_modules wowsimtbc
 	cd $(DESKTOP_DIR) && npm start
 
+# ---- MCP server -------------------------------------------------------------------------
+# Like the desktop shell, deliberately off the default build path. It is its own Go module, so
+# the MCP SDK never enters the root go.mod and `go build ./...`, `make test` and the four CI
+# shards (which list ./sim/...) never see any of it. The trade is that a breaking change in
+# sim/core only shows up here, so run `make mcp-test` when changing the engine's API.
+
+MCP_DIR     := mcp
+MCP_LDFLAGS := -X 'main.Version=$(VERSION)' -s -w
+
+# with_db is not optional in practice: without it every item lookup comes back empty.
+.PHONY: mcp
+mcp: sim/core/proto/api.pb.go
+	cd $(MCP_DIR) && go build --tags=with_db -o ../wowsimmcp -ldflags="$(MCP_LDFLAGS)" .
+
+.PHONY: mcp-test
+mcp-test: sim/core/proto/api.pb.go
+	cd $(MCP_DIR) && GOARCH=amd64 go test --tags=with_db ./...
+
+# Regenerates mcp/docs/TOOLS.md from the registry. Never edit that file by hand.
+.PHONY: mcp-docs
+mcp-docs: sim/core/proto/api.pb.go
+	cd $(MCP_DIR) && go run --tags=with_db ./cmd/gendocs
+
 sim/core/proto/api.pb.go: proto/*.proto
 	@if go version -m "$$(command -v protoc-gen-go)" 2>/dev/null | grep -qE '^[[:space:]]+mod[[:space:]]+github\.com/golang/protobuf[[:space:]]'; then \
 		echo "ERROR: your protoc-gen-go is the deprecated github.com/golang/protobuf plugin;"; \
