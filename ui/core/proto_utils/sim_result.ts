@@ -132,10 +132,23 @@ export class SimResult {
 	readonly encounterMetrics: EncounterMetrics;
 	readonly logs: Array<SimLog>;
 
+	// Wall-clock time the run took, in milliseconds. Measured by the caller around the worker
+	// call rather than derived from the result, because avgIterationDuration is simulated time
+	// -- how long the fights were -- and says nothing about how long the machine took.
+	readonly wallClockMs: number;
+
 	private players: Array<UnitMetrics>;
 	private units: Array<UnitMetrics>;
 
-	private constructor(request: RaidSimRequest, result: RaidSimResult, raidMetrics: RaidMetrics, encounterMetrics: EncounterMetrics, logs: Array<SimLog>) {
+	private constructor(
+		request: RaidSimRequest,
+		result: RaidSimResult,
+		raidMetrics: RaidMetrics,
+		encounterMetrics: EncounterMetrics,
+		logs: Array<SimLog>,
+		wallClockMs: number,
+	) {
+		this.wallClockMs = wallClockMs;
 		this.id = request.requestId;
 		this.request = request;
 		this.result = result;
@@ -240,7 +253,7 @@ export class SimResult {
 		return SimResult.makeNew(proto.request || RaidSimRequest.create(), proto.result || RaidSimResult.create());
 	}
 
-	static async makeNew(request: RaidSimRequest, result: RaidSimResult): Promise<SimResult> {
+	static async makeNew(request: RaidSimRequest, result: RaidSimResult, wallClockMs = 0): Promise<SimResult> {
 		const id = request.requestId;
 
 		const cachedResult = simResultsCache.get(id);
@@ -255,7 +268,7 @@ export class SimResult {
 		const raidMetrics = await raidPromise;
 		const encounterMetrics = await encounterPromise;
 
-		const simResult = new SimResult(request, result, raidMetrics, encounterMetrics, logs);
+		const simResult = new SimResult(request, result, raidMetrics, encounterMetrics, logs, wallClockMs);
 		simResultsCache.set(id, simResult);
 
 		return simResult;

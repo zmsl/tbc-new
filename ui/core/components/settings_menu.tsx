@@ -31,6 +31,7 @@ export class SettingsMenu extends BaseModal {
 		const useConcurrentWorkersWrap = ref<HTMLDivElement>();
 		const useConcurrentWorkers = ref<HTMLDivElement>();
 		const unlockAllCores = ref<HTMLDivElement>();
+		const debugMode = ref<HTMLDivElement>();
 		const allowPrerelease = ref<HTMLDivElement>();
 		const useConcurrentWorkersNote = ref<HTMLDivElement>();
 
@@ -51,6 +52,7 @@ export class SettingsMenu extends BaseModal {
 				<div ref={showThreatMetrics} className="show-threat-metrics-picker w-50 pe-2"></div>
 				<div ref={showExperimental} className="show-experimental-picker w-50 pe-2"></div>
 				<div ref={showQuickSwap} className="show-quick-swap-picker w-50 pe-2"></div>
+				<div ref={debugMode} className="debug-mode-picker w-50 pe-2"></div>
 				<div ref={allowPrerelease} className="allow-prerelease-picker w-50 pe-2"></div>
 				<div ref={useConcurrentWorkersWrap} className="use-concurrency-container w-50 pe-2">
 					<div ref={useConcurrentWorkers} className="use-concurrent-workers-picker"></div>
@@ -185,6 +187,25 @@ export class SettingsMenu extends BaseModal {
 				getValue: (sim: Sim) => sim.getShowQuickSwap(),
 				setValue: (eventID: EventID, sim: Sim, newValue: boolean) => {
 					sim.setShowQuickSwap(eventID, newValue);
+				},
+			});
+
+		if (debugMode.value)
+			new BooleanPicker<Sim>(debugMode.value, this.simUI.sim, {
+				id: 'simui-debug-mode',
+				label: i18n.t('info.options.feature_toggles.debug_mode.label'),
+				labelTooltip: i18n.t('info.options.feature_toggles.debug_mode.tooltip'),
+				inline: true,
+				changedEvent: (sim: Sim) => sim.debugModeChangeEmitter,
+				getValue: (sim: Sim) => sim.getDebugMode(),
+				setValue: (eventID: EventID, sim: Sim, newValue: boolean) => {
+					trackEvent({
+						action: 'settings',
+						category: 'debug-mode',
+						label: 'update',
+						value: newValue,
+					});
+					sim.setDebugMode(eventID, newValue);
 				},
 			});
 

@@ -2252,6 +2252,10 @@
 				"show_threat_metrics": "Show Threat/Tank Options",
 				"show_experimental": "Show Experimental",
 				"show_quick_swap": "Show quick swap interface",
+				"debug_mode": {
+					"label": "Debug Mode",
+					"tooltip": "Show extra diagnostic detail, including how long a sim run actually took and how many iterations per second it managed."
+				},
 				"allow_prerelease": {
 					"label": "Offer Pre-release Builds",
 					"tooltip": "Include release candidates when checking for updates. These are test builds published ahead of a stable release: newer, and more likely to have something wrong with them. Desktop app only."
@@ -2415,6 +2419,9 @@
 			"progress": {
 				"presim_running": "presimulations running",
 				"iterations_complete": "iterations complete"
+			},
+			"debug": {
+				"iterations_timing": "{{iterations}} iterations in {{seconds}}s ({{rate}}/sec)"
 			},
 			"reference": {
 				"save_as_reference": "Save as Reference",

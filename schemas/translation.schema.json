@@ -7918,6 +7918,19 @@
 								"show_quick_swap": {
 									"type": "string"
 								},
+								"debug_mode": {
+									"type": "object",
+									"properties": {
+										"label": {
+											"type": "string"
+										},
+										"tooltip": {
+											"type": "string"
+										}
+									},
+									"additionalProperties": false,
+									"required": ["label", "tooltip"]
+								},
 								"allow_prerelease": {
 									"type": "object",
 									"properties": {
@@ -7933,7 +7946,7 @@
 								}
 							},
 							"additionalProperties": false,
-							"required": ["show_threat_metrics", "show_experimental", "show_quick_swap", "allow_prerelease"]
+							"required": ["show_threat_metrics", "show_experimental", "show_quick_swap", "debug_mode", "allow_prerelease"]
 						},
 						"use_multiple_cpu_cores": {
 							"type": "object",
@@ -8503,6 +8516,16 @@
 							"additionalProperties": false,
 							"required": ["presim_running", "iterations_complete"]
 						},
+						"debug": {
+							"type": "object",
+							"properties": {
+								"iterations_timing": {
+									"type": "string"
+								}
+							},
+							"additionalProperties": false,
+							"required": ["iterations_timing"]
+						},
 						"reference": {
 							"type": "object",
 							"properties": {
@@ -8683,7 +8706,7 @@
 						}
 					},
 					"additionalProperties": false,
-					"required": ["progress", "reference", "metrics"]
+					"required": ["progress", "debug", "reference", "metrics"]
 				},
 				"character_stats": {
 					"type": "object",
