@@ -29,6 +29,7 @@ export class SettingsMenu extends BaseModal {
 		const showQuickSwap = ref<HTMLDivElement>();
 		const useConcurrentWorkersWrap = ref<HTMLDivElement>();
 		const useConcurrentWorkers = ref<HTMLDivElement>();
+		const unlockAllCores = ref<HTMLDivElement>();
 		const useConcurrentWorkersNote = ref<HTMLDivElement>();
 
 		const body = (
@@ -50,6 +51,7 @@ export class SettingsMenu extends BaseModal {
 				<div ref={showQuickSwap} className="show-quick-swap-picker w-50 pe-2"></div>
 				<div ref={useConcurrentWorkersWrap} className="use-concurrency-container w-50 pe-2">
 					<div ref={useConcurrentWorkers} className="use-concurrent-workers-picker"></div>
+					<div ref={unlockAllCores} className="unlock-all-cores-picker"></div>
 					<div ref={useConcurrentWorkersNote} className="form-text" hidden></div>
 				</div>
 			</div>
@@ -192,7 +194,7 @@ export class SettingsMenu extends BaseModal {
 			new EnumPicker<Sim>(useConcurrentWorkers.value, this.simUI.sim, {
 				id: 'simui-concurrent-workers-picker',
 				label: i18n.t('info.options.use_multiple_cpu_cores.label'),
-				labelTooltip: 'Use web workers to spread sim workload over multiple CPU cores.',
+				labelTooltip: i18n.t('info.options.use_multiple_cpu_cores.tooltip'),
 				changedEvent: (sim: Sim) => sim.wasmConcurrencyChangeEmitter,
 				getValue: (sim: Sim) => sim.getWasmConcurrency(),
 				setValue: (eventID, sim, newValue) => {
@@ -207,10 +209,42 @@ export class SettingsMenu extends BaseModal {
 				values: values,
 			});
 
-			if (useConcurrentWorkersNote.value && navigator.userAgent.toLowerCase().includes('firefox')) {
+			// Opting into every core, rather than raising the default for everyone. The picker
+			// above still works by hand; this pins the count to whatever machine the sim is
+			// open on, which is the part a fixed number cannot do.
+			if (unlockAllCores.value)
+				new BooleanPicker<Sim>(unlockAllCores.value, this.simUI.sim, {
+					id: 'simui-unlock-all-cores',
+					label: i18n.t('info.options.use_multiple_cpu_cores.unlock_all.label'),
+					labelTooltip: i18n.t('info.options.use_multiple_cpu_cores.unlock_all.tooltip', {
+						cores: navigator.hardwareConcurrency,
+					}),
+					inline: true,
+					changedEvent: (sim: Sim) => sim.wasmConcurrencyUnlockedChangeEmitter,
+					getValue: (sim: Sim) => sim.getWasmConcurrencyUnlocked(),
+					setValue: (eventID: EventID, sim: Sim, newValue: boolean) => {
+						trackEvent({
+							action: 'settings',
+							category: 'concurrency-unlock',
+							label: 'update',
+							value: newValue,
+						});
+						sim.setWasmConcurrencyUnlocked(eventID, newValue);
+					},
+				});
+
+			// The memory warning is the honest counterpart to the unlock: each worker carries its
+			// own wasm heap and item database. It used to be shown to Firefox only; anyone who has
+			// turned the cap off needs it too, whatever engine they are on.
+			if (useConcurrentWorkersNote.value) {
 				const el = useConcurrentWorkersNote.value;
-				el.hidden = false;
-				el.textContent = `Too many workers can cause significant memory usage! If sim doesn't finish due to RAM running out use a lower number.`;
+				const isFirefox = navigator.userAgent.toLowerCase().includes('firefox');
+				const updateNote = () => {
+					el.hidden = !isFirefox && !this.simUI.sim.getWasmConcurrencyUnlocked();
+					el.textContent = i18n.t('info.options.use_multiple_cpu_cores.memory_warning');
+				};
+				updateNote();
+				this.simUI.sim.wasmConcurrencyUnlockedChangeEmitter.on(updateNote);
 			}
 
 			// Hide if not running wasm. Local sim has native threading.

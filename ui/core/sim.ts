@@ -57,6 +57,7 @@ export type RunSimOptions = {
 };
 
 const WASM_CONCURRENCY_STORAGE_KEY = `${LOCAL_STORAGE_PREFIX}_wasmconcurrency`;
+const WASM_CONCURRENCY_UNLOCKED_STORAGE_KEY = `${LOCAL_STORAGE_PREFIX}_wasmconcurrencyunlocked`;
 
 // Core Sim module which deals only with api types, no UI-related stuff.
 // The backend needs an inactive meta gem left in its socket so the item's socket bonus still
@@ -85,6 +86,7 @@ export class Sim {
 	private showHealingMetrics = false;
 	private showExperimental = false;
 	private wasmConcurrency = 0;
+	private wasmConcurrencyUnlocked = false;
 	private showQuickSwap = true;
 	private showEPValues = false;
 	private language = '';
@@ -106,6 +108,7 @@ export class Sim {
 	readonly showHealingMetricsChangeEmitter = new TypedEvent<void>();
 	readonly showExperimentalChangeEmitter = new TypedEvent<void>();
 	readonly wasmConcurrencyChangeEmitter = new TypedEvent<void>();
+	readonly wasmConcurrencyUnlockedChangeEmitter = new TypedEvent<void>();
 	readonly showQuickSwapChangeEmitter = new TypedEvent<void>();
 	readonly showEPValuesChangeEmitter = new TypedEvent<void>();
 	readonly languageChangeEmitter = new TypedEvent<void>();
@@ -143,10 +146,18 @@ export class Sim {
 			}
 		});
 
+		// The unlock is opt-in and sticky: once on, the worker count follows this machine's core
+		// count rather than a number the user picked on some other machine.
+		this.wasmConcurrencyUnlocked = window.localStorage.getItem(WASM_CONCURRENCY_UNLOCKED_STORAGE_KEY) === 'true';
+
 		let wasmConcurrencySetting = parseInt(window.localStorage.getItem(WASM_CONCURRENCY_STORAGE_KEY) ?? 'NaN');
-		if (isNaN(wasmConcurrencySetting)) {
+		if (this.wasmConcurrencyUnlocked) {
+			wasmConcurrencySetting = navigator.hardwareConcurrency;
+		} else if (isNaN(wasmConcurrencySetting)) {
 			wasmConcurrencySetting = 0;
-			// Set a default worker count if env supports multiple threads. Should not be too high as to be safe for all situations.
+			// Deliberately conservative: every worker holds its own wasm heap and item database,
+			// so a high default can exhaust a tab's memory on a machine we know nothing about.
+			// Users who want the rest of their cores turn on the unlock in the settings menu.
 			// TODO: Set based on browser/engine? E.g. Firefox has significant RAM and CPU usage per worker while Chrome can run many without a downside.
 			if (navigator.hardwareConcurrency > 1) {
 				wasmConcurrencySetting = Math.min(4, Math.floor(navigator.hardwareConcurrency / 2));
@@ -173,6 +184,7 @@ export class Sim {
 			this.showHealingMetricsChangeEmitter,
 			this.showExperimentalChangeEmitter,
 			this.wasmConcurrencyChangeEmitter,
+			this.wasmConcurrencyUnlockedChangeEmitter,
 			this.showQuickSwapChangeEmitter,
 			this.showEPValuesChangeEmitter,
 			this.languageChangeEmitter,
@@ -660,10 +672,31 @@ export class Sim {
 		return this.wasmConcurrency;
 	}
 	setWasmConcurrency(eventID: EventID, newWasmConcurrency: number) {
+		// Picking a count by hand overrides the unlock, so the two never disagree about how many
+		// workers there should be. Setting it *to* the core count leaves the unlock alone --
+		// that is what the unlock itself does.
+		if (this.wasmConcurrencyUnlocked && newWasmConcurrency != navigator.hardwareConcurrency) {
+			this.setWasmConcurrencyUnlocked(eventID, false);
+		}
 		if (newWasmConcurrency != this.wasmConcurrency) {
 			this.wasmConcurrency = newWasmConcurrency;
 			window.localStorage.setItem(WASM_CONCURRENCY_STORAGE_KEY, newWasmConcurrency.toString());
 			this.wasmConcurrencyChangeEmitter.emit(eventID);
+		}
+	}
+
+	getWasmConcurrencyUnlocked(): boolean {
+		return this.wasmConcurrencyUnlocked;
+	}
+	setWasmConcurrencyUnlocked(eventID: EventID, newValue: boolean) {
+		if (newValue == this.wasmConcurrencyUnlocked) return;
+
+		this.wasmConcurrencyUnlocked = newValue;
+		window.localStorage.setItem(WASM_CONCURRENCY_UNLOCKED_STORAGE_KEY, newValue.toString());
+		this.wasmConcurrencyUnlockedChangeEmitter.emit(eventID);
+
+		if (newValue) {
+			this.setWasmConcurrency(eventID, navigator.hardwareConcurrency);
 		}
 	}
 
