@@ -8,6 +8,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/wowsims/tbc/mcp/internal/engine"
+	"github.com/wowsims/tbc/mcp/internal/engine/jobs"
 	"github.com/wowsims/tbc/mcp/internal/registry"
 	"github.com/wowsims/tbc/mcp/internal/spec"
 	"github.com/wowsims/tbc/sim"
@@ -15,6 +16,13 @@ import (
 
 func init() {
 	sim.RegisterAll()
+}
+
+// Each test gets its own job directory: the store is on disk precisely so it can be shared, and
+// sharing it between tests would let one test see another's runs.
+func testStore(t *testing.T) jobs.Store {
+	t.Helper()
+	return jobs.Store{Dir: t.TempDir()}
 }
 
 func testConfig() engine.Config {
@@ -26,7 +34,7 @@ func connect(t *testing.T) *mcp.ClientSession {
 	t.Helper()
 
 	server := mcp.NewServer(&mcp.Implementation{Name: "wowsims-tbc", Version: "test"}, nil)
-	if err := spec.Register(server, registry.All(testConfig())); err != nil {
+	if err := spec.Register(server, registry.All(testConfig(), testStore(t))); err != nil {
 		t.Fatalf("register: %v", err)
 	}
 
@@ -51,7 +59,7 @@ func connect(t *testing.T) *mcp.ClientSession {
 
 // Nothing registers without documenting itself, and nothing is declared twice.
 func TestRegistryValidates(t *testing.T) {
-	for _, entry := range registry.All(testConfig()) {
+	for _, entry := range registry.All(testConfig(), testStore(t)) {
 		if err := entry.Validate(); err != nil {
 			t.Errorf("%s %q: %v", entry.Kind(), entry.ID(), err)
 		}
@@ -81,8 +89,14 @@ func TestToolsAreSelfDescribing(t *testing.T) {
 		if tool.OutputSchema == nil {
 			t.Errorf("tool %q has no output schema", tool.Name)
 		}
-		if tool.Annotations == nil || !tool.Annotations.ReadOnlyHint {
-			t.Errorf("tool %q is not marked read-only; every tool so far is", tool.Name)
+		if tool.Annotations == nil {
+			t.Errorf("tool %q has no annotations", tool.Name)
+			continue
+		}
+		// Everything here answers questions except job_cancel, which stops a run. A tool that
+		// changes something has to say so, and to say whether repeating it is safe.
+		if !tool.Annotations.ReadOnlyHint && !tool.Annotations.IdempotentHint {
+			t.Errorf("tool %q is neither read-only nor idempotent", tool.Name)
 		}
 	}
 }
@@ -164,7 +178,7 @@ func TestToolCallsAreDeterministic(t *testing.T) {
 }
 
 func TestRegisterRejectsDuplicates(t *testing.T) {
-	entries := registry.All(testConfig())
+	entries := registry.All(testConfig(), testStore(t))
 	if len(entries) == 0 {
 		t.Fatal("registry is empty")
 	}

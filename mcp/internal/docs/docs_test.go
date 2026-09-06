@@ -8,6 +8,7 @@ import (
 
 	"github.com/wowsims/tbc/mcp/internal/docs"
 	"github.com/wowsims/tbc/mcp/internal/engine"
+	"github.com/wowsims/tbc/mcp/internal/engine/jobs"
 	"github.com/wowsims/tbc/mcp/internal/registry"
 	"github.com/wowsims/tbc/sim"
 )
@@ -19,7 +20,7 @@ func init() {
 func render(t *testing.T) string {
 	t.Helper()
 
-	rendered, err := docs.Render(registry.All(engine.Config{PresetsRoot: filepath.Join("..", "..", "..", "ui")}))
+	rendered, err := docs.Render(registry.All(engine.Config{PresetsRoot: filepath.Join("..", "..", "..", "ui")}, jobs.Store{Dir: t.TempDir()}))
 	if err != nil {
 		t.Fatalf("render: %v", err)
 	}

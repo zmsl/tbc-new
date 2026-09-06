@@ -1247,6 +1247,1291 @@ Read-only.
 
 </details>
 
+### `sim_run` — Run a simulation
+
+Simulates a setup and reports DPS with its error bars and a per-spell breakdown.
+
+Results are deterministic: the same arguments produce the same numbers, because the seed is
+fixed unless you change it. Compare two setups by running both at the same seed and iteration
+count, and treat a gap smaller than the two standard errors as noise rather than a difference.
+
+2000 iterations takes well under a second and is enough for most questions. Use async for
+anything above 20000, then poll job_status.
+
+Examples:
+- sim the smite priest's phase 3 set: {"spec": "SmitePriest", "gearSet": "p3"}
+- sim a setup someone shared, precisely: {"link": "https://wowsims.com/tbc/priest/smite/#eJys...", "iterations": 50000, "async": true}
+
+Read-only.
+
+<details><summary>Input schema</summary>
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "link": {
+      "type": "string",
+      "description": "a wowsims share link. Takes precedence over every other field here."
+    },
+    "spec": {
+      "type": "string",
+      "description": "spec to build from presets, e.g. SmitePriest or priest/smite. Required unless link is given."
+    },
+    "build": {
+      "type": "string",
+      "description": "name of a checked-in build preset, which supplies gear, talents, rotation and encounter at once"
+    },
+    "gearSet": {
+      "type": "string",
+      "description": "name of a checked-in gear set. Defaults to the highest-numbered phase set."
+    },
+    "rotation": {
+      "type": "string",
+      "description": "name of a checked-in APL rotation. Defaults to 'default' where it exists, otherwise the first one."
+    },
+    "talents": {
+      "type": "string",
+      "description": "talent string in wowhead format. Defaults to the spec's first checked-in talent preset."
+    },
+    "race": {
+      "type": "string",
+      "description": "race name, e.g. Undead. Defaults to a race the class can be."
+    },
+    "encounter": {
+      "type": "string",
+      "description": "ShortSingleTarget (60s), LongSingleTarget (180s, the default) or LongMultiTarget (180s, 20 enemies)"
+    },
+    "noBuffs": {
+      "type": "boolean",
+      "description": "strip raid buffs, party buffs and debuffs. Use to measure a spec alone rather than in a raid."
+    },
+    "iterations": {
+      "type": "integer",
+      "description": "fights to simulate. Defaults to 2000, which gives roughly half a percent of error on DPS. Above 20000 requires async.",
+      "minimum": -2147483648,
+      "maximum": 2147483647
+    },
+    "seed": {
+      "type": "integer",
+      "description": "RNG seed. Defaults to a fixed value, so repeating a call returns exactly the same numbers; change it to check a result is not a fluke of one seed."
+    },
+    "async": {
+      "type": "boolean",
+      "description": "start the run in the background and return a job id to poll with job_status"
+    },
+    "spellLimit": {
+      "type": "integer",
+      "description": "how many spells to include in the damage breakdown. Defaults to 12."
+    }
+  },
+  "additionalProperties": false
+}
+```
+
+</details>
+
+<details><summary>Output schema</summary>
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "result": {
+      "type": [
+        "null",
+        "object"
+      ],
+      "properties": {
+        "dps": {
+          "type": "object",
+          "properties": {
+            "avg": {
+              "type": "number"
+            },
+            "stdev": {
+              "type": "number",
+              "description": "standard deviation across iterations"
+            },
+            "stderr": {
+              "type": "number",
+              "description": "standard error of the mean: stdev divided by the square root of the iteration count"
+            }
+          },
+          "description": "damage per second across all iterations",
+          "required": [
+            "avg",
+            "stdev",
+            "stderr"
+          ],
+          "additionalProperties": false
+        },
+        "tps": {
+          "type": [
+            "null",
+            "object"
+          ],
+          "properties": {
+            "avg": {
+              "type": "number"
+            },
+            "stdev": {
+              "type": "number",
+              "description": "standard deviation across iterations"
+            },
+            "stderr": {
+              "type": "number",
+              "description": "standard error of the mean: stdev divided by the square root of the iteration count"
+            }
+          },
+          "description": "threat per second, when non-zero",
+          "required": [
+            "avg",
+            "stdev",
+            "stderr"
+          ],
+          "additionalProperties": false
+        },
+        "hps": {
+          "type": [
+            "null",
+            "object"
+          ],
+          "properties": {
+            "avg": {
+              "type": "number"
+            },
+            "stdev": {
+              "type": "number",
+              "description": "standard deviation across iterations"
+            },
+            "stderr": {
+              "type": "number",
+              "description": "standard error of the mean: stdev divided by the square root of the iteration count"
+            }
+          },
+          "description": "healing per second, when non-zero",
+          "required": [
+            "avg",
+            "stdev",
+            "stderr"
+          ],
+          "additionalProperties": false
+        },
+        "iterations": {
+          "type": "integer",
+          "description": "how many fights were simulated",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "durationSeconds": {
+          "type": "number",
+          "description": "the fight length that was simulated"
+        },
+        "secondsOutOfMana": {
+          "type": "number",
+          "description": "average seconds spent with no mana; anything above zero means the rotation is mana-capped"
+        },
+        "spells": {
+          "type": [
+            "null",
+            "array"
+          ],
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "the spell or ability"
+              },
+              "spellId": {
+                "type": "integer",
+                "minimum": -2147483648,
+                "maximum": 2147483647
+              },
+              "casts": {
+                "type": "number",
+                "description": "casts per iteration"
+              },
+              "damageSharePercent": {
+                "type": "number",
+                "description": "percentage of total damage this accounted for"
+              },
+              "dps": {
+                "type": "number",
+                "description": "damage per second from this spell alone"
+              },
+              "critPercent": {
+                "type": "number",
+                "description": "percentage of hits that critted"
+              },
+              "missPercent": {
+                "type": "number",
+                "description": "percentage of casts that missed or were resisted"
+              }
+            },
+            "required": [
+              "name",
+              "casts",
+              "damageSharePercent",
+              "dps"
+            ],
+            "additionalProperties": false
+          },
+          "description": "per-spell contribution, largest share first"
+        }
+      },
+      "description": "the simulation result, when it ran synchronously",
+      "required": [
+        "dps",
+        "iterations",
+        "durationSeconds"
+      ],
+      "additionalProperties": false
+    },
+    "job": {
+      "type": [
+        "null",
+        "object"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "the job id; a content hash of the request, so the same request always has the same id"
+        },
+        "kind": {
+          "type": "string",
+          "description": "what is being run, e.g. sim or statWeights"
+        },
+        "state": {
+          "type": "string",
+          "description": "running, done, failed, aborted or stale"
+        },
+        "label": {
+          "type": "string",
+          "description": "a human-readable description of the run"
+        },
+        "link": {
+          "type": "string",
+          "description": "share link for the setup being simulated"
+        },
+        "completedIterations": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "totalIterations": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "startedAt": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "string"
+        },
+        "pid": {
+          "type": "integer",
+          "description": "the process running it, for diagnosis"
+        },
+        "error": {
+          "type": "string",
+          "description": "why the job failed, when it did"
+        }
+      },
+      "description": "the job that was started, when async was set. Poll it with job_status and collect it with job_result.",
+      "required": [
+        "id",
+        "kind",
+        "state",
+        "completedIterations",
+        "totalIterations",
+        "startedAt",
+        "updatedAt",
+        "pid"
+      ],
+      "additionalProperties": false
+    },
+    "link": {
+      "type": "string",
+      "description": "share link for the setup that was simulated"
+    },
+    "summary": {
+      "type": "object",
+      "properties": {
+        "spec": {
+          "type": "string",
+          "description": "the spec being simulated, e.g. SmitePriest"
+        },
+        "class": {
+          "type": "string",
+          "description": "the class, e.g. Priest"
+        },
+        "race": {
+          "type": "string",
+          "description": "the character's race"
+        },
+        "talents": {
+          "type": "string",
+          "description": "talent string in wowhead format"
+        },
+        "professions": {
+          "type": [
+            "null",
+            "array"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "description": "professions, which gate some gear and consumables"
+        },
+        "encounter": {
+          "type": "object",
+          "properties": {
+            "durationSeconds": {
+              "type": "number",
+              "description": "fight length in seconds"
+            },
+            "targets": {
+              "type": "integer",
+              "description": "number of enemies"
+            }
+          },
+          "description": "what is being fought and for how long",
+          "required": [
+            "durationSeconds",
+            "targets"
+          ],
+          "additionalProperties": false
+        },
+        "buffed": {
+          "type": "boolean",
+          "description": "true when raid buffs and debuffs are applied"
+        },
+        "gear": {
+          "type": [
+            "null",
+            "array"
+          ],
+          "items": {
+            "type": "object",
+            "properties": {
+              "slot": {
+                "type": "string",
+                "description": "equipment slot, e.g. Head or MainHand"
+              },
+              "itemId": {
+                "type": "integer",
+                "description": "the item's id",
+                "minimum": -2147483648,
+                "maximum": 2147483647
+              },
+              "name": {
+                "type": "string",
+                "description": "the item's name, when the item database is loaded"
+              },
+              "enchant": {
+                "type": "integer",
+                "description": "enchant effect id, if enchanted",
+                "minimum": -2147483648,
+                "maximum": 2147483647
+              },
+              "gems": {
+                "type": [
+                  "null",
+                  "array"
+                ],
+                "items": {
+                  "type": "integer",
+                  "minimum": -2147483648,
+                  "maximum": 2147483647
+                },
+                "description": "socketed gem ids"
+              }
+            },
+            "required": [
+              "slot",
+              "itemId"
+            ],
+            "additionalProperties": false
+          },
+          "description": "equipped items, one entry per filled slot"
+        }
+      },
+      "description": "what was simulated",
+      "required": [
+        "spec",
+        "encounter",
+        "buffed"
+      ],
+      "additionalProperties": false
+    },
+    "notes": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "string"
+      },
+      "description": "which defaults were applied while assembling the setup"
+    }
+  },
+  "required": [
+    "link",
+    "summary"
+  ],
+  "additionalProperties": false
+}
+```
+
+</details>
+
+### `sim_stat_weights` — Compute stat weights
+
+Measures how much DPS each point of each stat is worth for a setup.
+
+Use the weights to rank gear cheaply -- score candidate items by their stats -- before spending
+simulations on the few that look best. Weights are specific to the setup that produced them:
+they shift with gear, talents and fight length, so recompute after a significant change.
+
+This runs two simulations per stat, so it costs several times a single sim_run.
+
+Examples:
+- weights for a phase 3 smite priest: {"spec": "SmitePriest", "gearSet": "p3"}
+
+Read-only.
+
+<details><summary>Input schema</summary>
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "link": {
+      "type": "string",
+      "description": "a wowsims share link. Takes precedence over every other field here."
+    },
+    "spec": {
+      "type": "string",
+      "description": "spec to build from presets, e.g. SmitePriest or priest/smite. Required unless link is given."
+    },
+    "build": {
+      "type": "string",
+      "description": "name of a checked-in build preset, which supplies gear, talents, rotation and encounter at once"
+    },
+    "gearSet": {
+      "type": "string",
+      "description": "name of a checked-in gear set. Defaults to the highest-numbered phase set."
+    },
+    "rotation": {
+      "type": "string",
+      "description": "name of a checked-in APL rotation. Defaults to 'default' where it exists, otherwise the first one."
+    },
+    "talents": {
+      "type": "string",
+      "description": "talent string in wowhead format. Defaults to the spec's first checked-in talent preset."
+    },
+    "race": {
+      "type": "string",
+      "description": "race name, e.g. Undead. Defaults to a race the class can be."
+    },
+    "encounter": {
+      "type": "string",
+      "description": "ShortSingleTarget (60s), LongSingleTarget (180s, the default) or LongMultiTarget (180s, 20 enemies)"
+    },
+    "noBuffs": {
+      "type": "boolean",
+      "description": "strip raid buffs, party buffs and debuffs. Use to measure a spec alone rather than in a raid."
+    },
+    "iterations": {
+      "type": "integer",
+      "description": "iterations per stat. Defaults to 1000. Weights are a difference between two sims, so they need more iterations than a single result to settle.",
+      "minimum": -2147483648,
+      "maximum": 2147483647
+    },
+    "seed": {
+      "type": "integer",
+      "description": "RNG seed. Defaults to a fixed value."
+    },
+    "stats": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "string"
+      },
+      "description": "stats to weigh, e.g. [\"SpellDamage\", \"SpellHitRating\"]. Defaults to a sensible set for the class."
+    }
+  },
+  "additionalProperties": false
+}
+```
+
+</details>
+
+<details><summary>Output schema</summary>
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "weights": {
+      "type": "object",
+      "description": "DPS gained per point of each stat, with its error",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "weight": {
+            "type": "number",
+            "description": "DPS per point of this stat"
+          },
+          "stdev": {
+            "type": "number",
+            "description": "uncertainty in the weight; a weight smaller than this is indistinguishable from zero"
+          },
+          "ep": {
+            "type": "number",
+            "description": "value relative to the reference stat, which is the class's main damage stat"
+          }
+        },
+        "required": [
+          "weight",
+          "stdev",
+          "ep"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "link": {
+      "type": "string",
+      "description": "share link for the setup that was weighed"
+    },
+    "summary": {
+      "type": "object",
+      "properties": {
+        "spec": {
+          "type": "string",
+          "description": "the spec being simulated, e.g. SmitePriest"
+        },
+        "class": {
+          "type": "string",
+          "description": "the class, e.g. Priest"
+        },
+        "race": {
+          "type": "string",
+          "description": "the character's race"
+        },
+        "talents": {
+          "type": "string",
+          "description": "talent string in wowhead format"
+        },
+        "professions": {
+          "type": [
+            "null",
+            "array"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "description": "professions, which gate some gear and consumables"
+        },
+        "encounter": {
+          "type": "object",
+          "properties": {
+            "durationSeconds": {
+              "type": "number",
+              "description": "fight length in seconds"
+            },
+            "targets": {
+              "type": "integer",
+              "description": "number of enemies"
+            }
+          },
+          "description": "what is being fought and for how long",
+          "required": [
+            "durationSeconds",
+            "targets"
+          ],
+          "additionalProperties": false
+        },
+        "buffed": {
+          "type": "boolean",
+          "description": "true when raid buffs and debuffs are applied"
+        },
+        "gear": {
+          "type": [
+            "null",
+            "array"
+          ],
+          "items": {
+            "type": "object",
+            "properties": {
+              "slot": {
+                "type": "string",
+                "description": "equipment slot, e.g. Head or MainHand"
+              },
+              "itemId": {
+                "type": "integer",
+                "description": "the item's id",
+                "minimum": -2147483648,
+                "maximum": 2147483647
+              },
+              "name": {
+                "type": "string",
+                "description": "the item's name, when the item database is loaded"
+              },
+              "enchant": {
+                "type": "integer",
+                "description": "enchant effect id, if enchanted",
+                "minimum": -2147483648,
+                "maximum": 2147483647
+              },
+              "gems": {
+                "type": [
+                  "null",
+                  "array"
+                ],
+                "items": {
+                  "type": "integer",
+                  "minimum": -2147483648,
+                  "maximum": 2147483647
+                },
+                "description": "socketed gem ids"
+              }
+            },
+            "required": [
+              "slot",
+              "itemId"
+            ],
+            "additionalProperties": false
+          },
+          "description": "equipped items, one entry per filled slot"
+        }
+      },
+      "description": "what was weighed",
+      "required": [
+        "spec",
+        "encounter",
+        "buffed"
+      ],
+      "additionalProperties": false
+    },
+    "notes": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "string"
+      },
+      "description": "which defaults were applied"
+    }
+  },
+  "required": [
+    "weights",
+    "link",
+    "summary"
+  ],
+  "additionalProperties": false
+}
+```
+
+</details>
+
+### `job_status` — Check a running simulation
+
+Reports how far a background simulation has got.
+
+Poll this after starting a run with sim_run and async set. A job reported as 'stale' was
+orphaned by a server restart; re-submitting the identical sim_run call starts it again and
+produces the same answer, because runs are seeded and deterministic.
+
+Examples:
+- check progress: {"id": "3f2a1c9d4e5b6a7f"}
+
+Read-only.
+
+<details><summary>Input schema</summary>
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "the job id returned by sim_run with async set"
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "additionalProperties": false
+}
+```
+
+</details>
+
+<details><summary>Output schema</summary>
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "job": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "the job id; a content hash of the request, so the same request always has the same id"
+        },
+        "kind": {
+          "type": "string",
+          "description": "what is being run, e.g. sim or statWeights"
+        },
+        "state": {
+          "type": "string",
+          "description": "running, done, failed, aborted or stale"
+        },
+        "label": {
+          "type": "string",
+          "description": "a human-readable description of the run"
+        },
+        "link": {
+          "type": "string",
+          "description": "share link for the setup being simulated"
+        },
+        "completedIterations": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "totalIterations": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "startedAt": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "string"
+        },
+        "pid": {
+          "type": "integer",
+          "description": "the process running it, for diagnosis"
+        },
+        "error": {
+          "type": "string",
+          "description": "why the job failed, when it did"
+        }
+      },
+      "description": "the job's current state",
+      "required": [
+        "id",
+        "kind",
+        "state",
+        "completedIterations",
+        "totalIterations",
+        "startedAt",
+        "updatedAt",
+        "pid"
+      ],
+      "additionalProperties": false
+    },
+    "percentComplete": {
+      "type": "number",
+      "description": "progress through the requested iterations"
+    }
+  },
+  "required": [
+    "job",
+    "percentComplete"
+  ],
+  "additionalProperties": false
+}
+```
+
+</details>
+
+### `job_result` — Collect a finished simulation
+
+Returns the result of a completed background simulation.
+
+Results stay readable until they are pruned, so asking twice is fine -- collecting a result
+does not consume it.
+
+Examples:
+- collect a result: {"id": "3f2a1c9d4e5b6a7f"}
+
+Read-only.
+
+<details><summary>Input schema</summary>
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "the job id"
+    },
+    "spellLimit": {
+      "type": "integer",
+      "description": "how many spells to include in the damage breakdown. Defaults to 12."
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "additionalProperties": false
+}
+```
+
+</details>
+
+<details><summary>Output schema</summary>
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "job": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "the job id; a content hash of the request, so the same request always has the same id"
+        },
+        "kind": {
+          "type": "string",
+          "description": "what is being run, e.g. sim or statWeights"
+        },
+        "state": {
+          "type": "string",
+          "description": "running, done, failed, aborted or stale"
+        },
+        "label": {
+          "type": "string",
+          "description": "a human-readable description of the run"
+        },
+        "link": {
+          "type": "string",
+          "description": "share link for the setup being simulated"
+        },
+        "completedIterations": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "totalIterations": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "startedAt": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "string"
+        },
+        "pid": {
+          "type": "integer",
+          "description": "the process running it, for diagnosis"
+        },
+        "error": {
+          "type": "string",
+          "description": "why the job failed, when it did"
+        }
+      },
+      "description": "the job that produced this",
+      "required": [
+        "id",
+        "kind",
+        "state",
+        "completedIterations",
+        "totalIterations",
+        "startedAt",
+        "updatedAt",
+        "pid"
+      ],
+      "additionalProperties": false
+    },
+    "result": {
+      "type": "object",
+      "properties": {
+        "dps": {
+          "type": "object",
+          "properties": {
+            "avg": {
+              "type": "number"
+            },
+            "stdev": {
+              "type": "number",
+              "description": "standard deviation across iterations"
+            },
+            "stderr": {
+              "type": "number",
+              "description": "standard error of the mean: stdev divided by the square root of the iteration count"
+            }
+          },
+          "description": "damage per second across all iterations",
+          "required": [
+            "avg",
+            "stdev",
+            "stderr"
+          ],
+          "additionalProperties": false
+        },
+        "tps": {
+          "type": [
+            "null",
+            "object"
+          ],
+          "properties": {
+            "avg": {
+              "type": "number"
+            },
+            "stdev": {
+              "type": "number",
+              "description": "standard deviation across iterations"
+            },
+            "stderr": {
+              "type": "number",
+              "description": "standard error of the mean: stdev divided by the square root of the iteration count"
+            }
+          },
+          "description": "threat per second, when non-zero",
+          "required": [
+            "avg",
+            "stdev",
+            "stderr"
+          ],
+          "additionalProperties": false
+        },
+        "hps": {
+          "type": [
+            "null",
+            "object"
+          ],
+          "properties": {
+            "avg": {
+              "type": "number"
+            },
+            "stdev": {
+              "type": "number",
+              "description": "standard deviation across iterations"
+            },
+            "stderr": {
+              "type": "number",
+              "description": "standard error of the mean: stdev divided by the square root of the iteration count"
+            }
+          },
+          "description": "healing per second, when non-zero",
+          "required": [
+            "avg",
+            "stdev",
+            "stderr"
+          ],
+          "additionalProperties": false
+        },
+        "iterations": {
+          "type": "integer",
+          "description": "how many fights were simulated",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "durationSeconds": {
+          "type": "number",
+          "description": "the fight length that was simulated"
+        },
+        "secondsOutOfMana": {
+          "type": "number",
+          "description": "average seconds spent with no mana; anything above zero means the rotation is mana-capped"
+        },
+        "spells": {
+          "type": [
+            "null",
+            "array"
+          ],
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "the spell or ability"
+              },
+              "spellId": {
+                "type": "integer",
+                "minimum": -2147483648,
+                "maximum": 2147483647
+              },
+              "casts": {
+                "type": "number",
+                "description": "casts per iteration"
+              },
+              "damageSharePercent": {
+                "type": "number",
+                "description": "percentage of total damage this accounted for"
+              },
+              "dps": {
+                "type": "number",
+                "description": "damage per second from this spell alone"
+              },
+              "critPercent": {
+                "type": "number",
+                "description": "percentage of hits that critted"
+              },
+              "missPercent": {
+                "type": "number",
+                "description": "percentage of casts that missed or were resisted"
+              }
+            },
+            "required": [
+              "name",
+              "casts",
+              "damageSharePercent",
+              "dps"
+            ],
+            "additionalProperties": false
+          },
+          "description": "per-spell contribution, largest share first"
+        }
+      },
+      "description": "the simulation result",
+      "required": [
+        "dps",
+        "iterations",
+        "durationSeconds"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "job",
+    "result"
+  ],
+  "additionalProperties": false
+}
+```
+
+</details>
+
+### `job_cancel` — Stop a running simulation
+
+Cancels a background simulation.
+
+Cancelling a job that has already finished does nothing and is not an error. A cancelled job
+has no result; re-submit the same sim_run call to run it again.
+
+Examples:
+- stop a long run: {"id": "3f2a1c9d4e5b6a7f"}
+
+<details><summary>Input schema</summary>
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "the job id"
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "additionalProperties": false
+}
+```
+
+</details>
+
+<details><summary>Output schema</summary>
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "job": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "the job id; a content hash of the request, so the same request always has the same id"
+        },
+        "kind": {
+          "type": "string",
+          "description": "what is being run, e.g. sim or statWeights"
+        },
+        "state": {
+          "type": "string",
+          "description": "running, done, failed, aborted or stale"
+        },
+        "label": {
+          "type": "string",
+          "description": "a human-readable description of the run"
+        },
+        "link": {
+          "type": "string",
+          "description": "share link for the setup being simulated"
+        },
+        "completedIterations": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "totalIterations": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "startedAt": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "string"
+        },
+        "pid": {
+          "type": "integer",
+          "description": "the process running it, for diagnosis"
+        },
+        "error": {
+          "type": "string",
+          "description": "why the job failed, when it did"
+        }
+      },
+      "description": "the job's state after the cancel",
+      "required": [
+        "id",
+        "kind",
+        "state",
+        "completedIterations",
+        "totalIterations",
+        "startedAt",
+        "updatedAt",
+        "pid"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "job"
+  ],
+  "additionalProperties": false
+}
+```
+
+</details>
+
+### `job_list` — List simulations
+
+Lists background simulations and their states.
+
+Includes jobs started by other sessions sharing the same job directory, and jobs that outlived
+the server that started them.
+
+Examples:
+- what is running: {}
+
+Read-only.
+
+<details><summary>Input schema</summary>
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false
+}
+```
+
+</details>
+
+<details><summary>Output schema</summary>
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "jobs": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "the job id; a content hash of the request, so the same request always has the same id"
+          },
+          "kind": {
+            "type": "string",
+            "description": "what is being run, e.g. sim or statWeights"
+          },
+          "state": {
+            "type": "string",
+            "description": "running, done, failed, aborted or stale"
+          },
+          "label": {
+            "type": "string",
+            "description": "a human-readable description of the run"
+          },
+          "link": {
+            "type": "string",
+            "description": "share link for the setup being simulated"
+          },
+          "completedIterations": {
+            "type": "integer",
+            "minimum": -2147483648,
+            "maximum": 2147483647
+          },
+          "totalIterations": {
+            "type": "integer",
+            "minimum": -2147483648,
+            "maximum": 2147483647
+          },
+          "startedAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          },
+          "pid": {
+            "type": "integer",
+            "description": "the process running it, for diagnosis"
+          },
+          "error": {
+            "type": "string",
+            "description": "why the job failed, when it did"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "state",
+          "completedIterations",
+          "totalIterations",
+          "startedAt",
+          "updatedAt",
+          "pid"
+        ],
+        "additionalProperties": false
+      },
+      "description": "known jobs, most recently started first"
+    }
+  },
+  "required": [
+    "jobs"
+  ],
+  "additionalProperties": false
+}
+```
+
+</details>
+
 ## Resources
 
 ### `wowsims://spec/{class}/{spec}/gear/{name}` — Gear set

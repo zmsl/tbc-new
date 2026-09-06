@@ -20,6 +20,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/wowsims/tbc/mcp/internal/engine"
+	"github.com/wowsims/tbc/mcp/internal/engine/jobs"
 	"github.com/wowsims/tbc/mcp/internal/registry"
 	"github.com/wowsims/tbc/mcp/internal/spec"
 	"github.com/wowsims/tbc/sim"
@@ -31,6 +32,8 @@ var Version = "development"
 
 func main() {
 	presetsRoot := flag.String("presets-root", "", "directory holding the checked-in presets (the repo's ui/). Defaults to $WOWSIMS_PRESETS_ROOT, then ./ui, then the ui/ beside the binary.")
+	jobsDir := flag.String("jobs-dir", "", "directory holding background simulation records. Defaults to $WOWSIMS_JOBS_DIR, then the user cache directory.")
+	jobTTL := flag.Duration("jobs-ttl", jobs.DefaultTTL, "how long finished simulations stay readable")
 	flag.Parse()
 
 	root, err := resolvePresetsRoot(*presetsRoot)
@@ -48,6 +51,13 @@ func main() {
 		log.Print("wowsimmcp: built without the item database; item lookups will be empty (build with --tags=with_db)")
 	}
 
+	store := jobs.Store{Dir: resolveJobsDir(*jobsDir), TTL: *jobTTL}
+	// Records outlive the process that made them, so old ones are cleared on the way in rather
+	// than accumulating forever.
+	if err := store.Prune(); err != nil {
+		log.Printf("wowsimmcp: could not prune old job records: %v", err)
+	}
+
 	config := engine.Config{PresetsRoot: root}
 
 	server := mcp.NewServer(&mcp.Implementation{
@@ -56,13 +66,28 @@ func main() {
 		Version: Version,
 	}, nil)
 
-	if err := spec.Register(server, registry.All(config)); err != nil {
+	if err := spec.Register(server, registry.All(config, store)); err != nil {
 		log.Fatalf("wowsimmcp: %v", err)
 	}
 
 	if err := server.Run(context.Background(), &mcp.StdioTransport{}); err != nil {
 		log.Fatalf("wowsimmcp: %v", err)
 	}
+}
+
+// Job records live on disk rather than in memory so that an id means the same thing after a
+// restart, and to a second instance pointed at the same directory.
+func resolveJobsDir(flagValue string) string {
+	if flagValue != "" {
+		return flagValue
+	}
+	if fromEnv := os.Getenv("WOWSIMS_JOBS_DIR"); fromEnv != "" {
+		return fromEnv
+	}
+	if cache, err := os.UserCacheDir(); err == nil {
+		return filepath.Join(cache, "wowsimmcp", "jobs")
+	}
+	return filepath.Join(os.TempDir(), "wowsimmcp", "jobs")
 }
 
 // The presets are files in the repo rather than data compiled into the binary, so the server has

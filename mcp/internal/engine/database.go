@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"sync"
@@ -19,6 +20,7 @@ var (
 	databaseOnce sync.Once
 	uiDatabase   *proto.UIDatabase
 	gearLookup   core.GearLookup
+	spellNames   map[int32]string
 )
 
 func loadDatabase() {
@@ -36,6 +38,20 @@ func loadDatabase() {
 		for _, gem := range uiDatabase.Gems {
 			gearLookup.Gems[gem.Id] = gem
 		}
+
+		// The simulation identifies everything by id; only the client database carries names for
+		// spells, so a readable result breakdown has to come from here.
+		spellNames = make(map[int32]string, len(uiDatabase.SpellIcons))
+		for _, icon := range uiDatabase.SpellIcons {
+			if icon.Name == "" {
+				continue
+			}
+			name := icon.Name
+			if icon.Rank > 0 {
+				name = fmt.Sprintf("%s (Rank %d)", name, icon.Rank)
+			}
+			spellNames[icon.Id] = name
+		}
 	})
 }
 
@@ -49,6 +65,12 @@ func Database() *proto.UIDatabase {
 func GearLookup() core.GearLookup {
 	loadDatabase()
 	return gearLookup
+}
+
+// SpellName returns a spell's name, or "" when the database does not know the id.
+func SpellName(id int32) string {
+	loadDatabase()
+	return spellNames[id]
 }
 
 // Item returns one item by id.

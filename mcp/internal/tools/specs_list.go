@@ -7,13 +7,14 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/wowsims/tbc/mcp/internal/engine"
+	"github.com/wowsims/tbc/mcp/internal/engine/jobs"
 	"github.com/wowsims/tbc/mcp/internal/spec"
 	"github.com/wowsims/tbc/sim/core"
 	"github.com/wowsims/tbc/sim/core/proto"
 )
 
 // Entries lists every tool the server exposes.
-func Entries(config engine.Config) []spec.Entry {
+func Entries(config engine.Config, store jobs.Store) []spec.Entry {
 	return []spec.Entry{
 		specsList(config),
 		settingsCreate(config),
@@ -22,6 +23,12 @@ func Entries(config engine.Config) []spec.Entry {
 		charStats(config),
 		gearValidate(config),
 		itemSearch(),
+		simRun(config, store),
+		statWeights(config),
+		jobStatus(store),
+		jobResult(store),
+		jobCancel(store),
+		jobList(store),
 	}
 }
 

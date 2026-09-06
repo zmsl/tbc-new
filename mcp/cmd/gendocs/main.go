@@ -12,6 +12,7 @@ import (
 
 	"github.com/wowsims/tbc/mcp/internal/docs"
 	"github.com/wowsims/tbc/mcp/internal/engine"
+	"github.com/wowsims/tbc/mcp/internal/engine/jobs"
 	"github.com/wowsims/tbc/mcp/internal/registry"
 	"github.com/wowsims/tbc/sim"
 )
@@ -24,7 +25,11 @@ func main() {
 
 	// Entries are constructed with a config, but only their declarations are rendered, so the
 	// output does not depend on what is in the presets tree.
-	rendered, err := docs.Render(registry.All(engine.Config{PresetsRoot: filepath.Join("..", "ui")}))
+	// The jobs directory is never touched while rendering: only declarations are read.
+	rendered, err := docs.Render(registry.All(
+		engine.Config{PresetsRoot: filepath.Join("..", "ui")},
+		jobs.Store{Dir: filepath.Join(os.TempDir(), "wowsimmcp-docs")},
+	))
 	if err != nil {
 		fail(err)
 	}
