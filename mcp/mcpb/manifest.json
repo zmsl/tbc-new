@@ -60,6 +60,14 @@
       "description": "Finds items by name, slot, class, phase, quality and stats."
     },
     {
+      "name": "db_search_gems",
+      "description": "Finds gems by colour, stats, phase and quality, including what each meta gem requires to be active."
+    },
+    {
+      "name": "db_search_enchants",
+      "description": "Finds enchants by slot, class, stats and phase, including which profession an enchant needs."
+    },
+    {
       "name": "import_addon",
       "description": "Turns a WowSimsExporter addon export into a simulatable setup and a share link."
     },

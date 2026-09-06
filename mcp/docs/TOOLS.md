@@ -1247,6 +1247,275 @@ Read-only.
 
 </details>
 
+### `db_search_gems` — Search gems
+
+Finds gems by colour, stats, phase and quality, including what each meta gem requires to be active.
+
+Gems are worth several hundred DPS across a full set, and the simulator's own records do not
+carry their colour, so this is the only way to choose one.
+
+Meta gems matter more than their stats suggest: a meta whose colour requirement is unmet
+contributes nothing at all. `metaRequirement` says what has to be socketed elsewhere, and
+gear_validate reports when a set fails it.
+
+Examples:
+- spell damage gems for a blue socket: {"color": "Blue", "hasStats": ["SpellDamage"], "minQuality": "Rare"}
+- what does Chaotic Skyfire Diamond need: {"name": "Chaotic Skyfire"}
+
+Read-only.
+
+<details><summary>Input schema</summary>
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "match gems whose name contains this text"
+    },
+    "color": {
+      "type": "string",
+      "description": "socket colour to fill: Red, Yellow, Blue or Meta. Hybrid gems (Orange, Green, Purple) are returned for either of their halves, because that is how socket bonuses and meta requirements count them."
+    },
+    "maxPhase": {
+      "type": "integer",
+      "description": "only gems available by this raid phase (1-5)",
+      "minimum": -2147483648,
+      "maximum": 2147483647
+    },
+    "minQuality": {
+      "type": "string",
+      "description": "minimum quality: Common, Uncommon, Rare, Epic or Legendary"
+    },
+    "hasStats": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "string"
+      },
+      "description": "only gems carrying all of these stats, e.g. [\"SpellDamage\"]"
+    },
+    "limit": {
+      "type": "integer",
+      "description": "how many gems to return, 1-200. Defaults to 25."
+    }
+  },
+  "additionalProperties": false
+}
+```
+
+</details>
+
+<details><summary>Output schema</summary>
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "gems": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "the gem's id, as used in a gear set's gems array",
+            "minimum": -2147483648,
+            "maximum": 2147483647
+          },
+          "name": {
+            "type": "string"
+          },
+          "color": {
+            "type": "string",
+            "description": "Red, Yellow, Blue, Meta, or a hybrid colour that counts for two"
+          },
+          "phase": {
+            "type": "integer",
+            "minimum": -2147483648,
+            "maximum": 2147483647
+          },
+          "quality": {
+            "type": "string"
+          },
+          "unique": {
+            "type": "boolean",
+            "description": "true when only one may be equipped"
+          },
+          "stats": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number"
+            }
+          },
+          "metaRequirement": {
+            "type": "string",
+            "description": "for meta gems, the colours needed elsewhere in the gear for it to be active at all"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "color"
+        ],
+        "additionalProperties": false
+      },
+      "description": "matching gems, most recent phase and highest quality first"
+    },
+    "totalFound": {
+      "type": "integer",
+      "description": "how many gems matched before the limit was applied"
+    }
+  },
+  "required": [
+    "gems",
+    "totalFound"
+  ],
+  "additionalProperties": false
+}
+```
+
+</details>
+
+### `db_search_enchants` — Search enchants
+
+Finds enchants by slot, class, stats and phase, including which profession an enchant needs.
+
+Enchants are named in a gear set by their effect id, which is what this returns.
+
+Watch `requiredProfession`: ring enchants need Enchanting, and a character without it simply
+does not get them -- the simulator strips them rather than crediting stats the character
+could not have.
+
+Examples:
+- caster head enchants: {"slot": "Head", "class": "Priest", "hasStats": ["SpellDamage"]}
+- what a ring enchant needs: {"slot": "Finger1"}
+
+Read-only.
+
+<details><summary>Input schema</summary>
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "match enchants whose name contains this text"
+    },
+    "slot": {
+      "type": "string",
+      "description": "the slot to enchant, e.g. Head, Chest, MainHand"
+    },
+    "class": {
+      "type": "string",
+      "description": "restrict to enchants this class may use"
+    },
+    "maxPhase": {
+      "type": "integer",
+      "description": "only enchants available by this raid phase (1-5)",
+      "minimum": -2147483648,
+      "maximum": 2147483647
+    },
+    "hasStats": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "string"
+      },
+      "description": "only enchants carrying all of these stats"
+    },
+    "limit": {
+      "type": "integer",
+      "description": "how many enchants to return, 1-200. Defaults to 25."
+    }
+  },
+  "additionalProperties": false
+}
+```
+
+</details>
+
+<details><summary>Output schema</summary>
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "enchants": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "object",
+        "properties": {
+          "effectId": {
+            "type": "integer",
+            "description": "the id a gear set names an enchant by",
+            "minimum": -2147483648,
+            "maximum": 2147483647
+          },
+          "name": {
+            "type": "string"
+          },
+          "slots": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "the slots this enchant may be applied to"
+          },
+          "phase": {
+            "type": "integer",
+            "minimum": -2147483648,
+            "maximum": 2147483647
+          },
+          "requiredProfession": {
+            "type": "string",
+            "description": "a profession the character must have to apply it, e.g. Enchanting for ring enchants"
+          },
+          "stats": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number"
+            }
+          }
+        },
+        "required": [
+          "effectId",
+          "name",
+          "slots"
+        ],
+        "additionalProperties": false
+      },
+      "description": "matching enchants, most recent phase first"
+    },
+    "totalFound": {
+      "type": "integer"
+    }
+  },
+  "required": [
+    "enchants",
+    "totalFound"
+  ],
+  "additionalProperties": false
+}
+```
+
+</details>
+
 ### `import_addon` — Import a character
 
 Turns a WowSimsExporter addon export into a simulatable setup and a share link.
@@ -3195,6 +3464,17 @@ Use db_search_items to find ids; this is for reading one you already have, such 
 
 Examples:
 - Zhar'doom, Greatstaff of the Devourer: wowsims://item/32374
+
+Returns `application/json`.
+
+### `wowsims://gem/{id}` — Gem
+
+One gem from the database, by id: colour, stats, phase and, for meta gems, what it requires to be active.
+
+Use db_search_gems to find ids; this is for reading one you already have, such as an id out of a gear set.
+
+Examples:
+- Chaotic Skyfire Diamond: wowsims://gem/34220
 
 Returns `application/json`.
 

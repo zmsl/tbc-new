@@ -35,6 +35,7 @@ func Entries(config engine.Config) []spec.Entry {
 		gearIndexResource(config),
 		talentsResource(config),
 		itemResource(),
+		gemResource(),
 	}
 }
 
@@ -158,6 +159,39 @@ func itemResource() spec.Entry {
 				return nil, fmt.Errorf("no item with id %d", id)
 			}
 			encoded, err := json.MarshalIndent(item, "", "  ")
+			if err != nil {
+				return nil, err
+			}
+			return jsonResult(request.Params.URI, encoded), nil
+		},
+	}
+}
+
+func gemResource() spec.Entry {
+	return spec.Resource{
+		URI:      scheme + "gem/{id}",
+		Name:     "gem",
+		Title:    "Gem",
+		Summary:  "One gem from the database, by id: colour, stats, phase and, for meta gems, what it requires to be active.",
+		Details:  "Use db_search_gems to find ids; this is for reading one you already have, such as an id out of a gear set.",
+		MIMEType: "application/json",
+		Examples: []spec.Example{{Description: "Chaotic Skyfire Diamond", Args: "wowsims://gem/34220"}},
+		Handler: func(ctx context.Context, request *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+			raw := strings.TrimPrefix(request.Params.URI, scheme+"gem/")
+			id, err := strconv.ParseInt(raw, 10, 32)
+			if err != nil {
+				return nil, fmt.Errorf("gem id %q is not a number", raw)
+			}
+
+			gem, ok := engine.Gem(int32(id))
+			if !ok {
+				return nil, fmt.Errorf("no gem with id %d", id)
+			}
+
+			encoded, err := json.MarshalIndent(struct {
+				*proto.UIGem
+				MetaRequirement string `json:"metaRequirement,omitempty"`
+			}{gem, engine.MetaRequirement(gem.Id)}, "", "  ")
 			if err != nil {
 				return nil, err
 			}

@@ -23,6 +23,8 @@ func Entries(config engine.Config, store jobs.Store) []spec.Entry {
 		charStats(config),
 		gearValidate(config),
 		itemSearch(),
+		gemSearch(),
+		enchantSearch(),
 		importAddon(config),
 		simRun(config, store),
 		statWeights(config),

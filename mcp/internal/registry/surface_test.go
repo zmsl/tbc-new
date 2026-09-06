@@ -377,3 +377,111 @@ func TestGearIndexResource(t *testing.T) {
 		t.Errorf("reading a single set through the index's sibling URI broke: %.80s", gear)
 	}
 }
+
+func TestGemSearch(t *testing.T) {
+	session := connect(t)
+
+	type gemSearchOutput struct {
+		TotalFound int `json:"totalFound"`
+		Gems       []struct {
+			ID              int32              `json:"id"`
+			Name            string             `json:"name"`
+			Color           string             `json:"color"`
+			Stats           map[string]float64 `json:"stats"`
+			MetaRequirement string             `json:"metaRequirement"`
+		} `json:"gems"`
+	}
+
+	t.Run("by colour and stat", func(t *testing.T) {
+		output := callTool[gemSearchOutput](t, session, "db_search_gems", map[string]any{
+			"color":      "Blue",
+			"hasStats":   []string{"SpellDamage"},
+			"minQuality": "Rare",
+			"limit":      10,
+		})
+		if len(output.Gems) == 0 {
+			t.Fatal("no blue spell damage gems")
+		}
+		for _, gem := range output.Gems {
+			if gem.Stats["SpellDamage"] <= 0 {
+				t.Errorf("%s has no spell damage", gem.Name)
+			}
+			// Hybrids count for both halves, so a purple gem is a legitimate answer for blue.
+			if !strings.Contains(gem.Color, "Blue") && !strings.Contains(gem.Color, "Purple") && !strings.Contains(gem.Color, "Green") {
+				t.Errorf("%s is %s, which does not fill a blue socket", gem.Name, gem.Color)
+			}
+		}
+	})
+
+	// The requirement is the point of the tool: gear_validate can say a meta is inactive, and
+	// only this says what would fix it.
+	t.Run("meta gems say what they need", func(t *testing.T) {
+		output := callTool[gemSearchOutput](t, session, "db_search_gems", map[string]any{"name": "Chaotic Skyfire"})
+		if len(output.Gems) == 0 {
+			t.Fatal("Chaotic Skyfire Diamond not found")
+		}
+
+		gem := output.Gems[0]
+		if gem.ID != 34220 {
+			t.Errorf("found gem %d", gem.ID)
+		}
+		if !strings.Contains(gem.MetaRequirement, "blue") {
+			t.Errorf("requirement %q does not mention the blue gems it needs", gem.MetaRequirement)
+		}
+	})
+
+	t.Run("rejects unknown colours", func(t *testing.T) {
+		if message := toolError(t, session, "db_search_gems", map[string]any{"color": "Chartreuse"}); !strings.Contains(message, "Chartreuse") {
+			t.Errorf("error does not name the bad colour: %s", message)
+		}
+	})
+}
+
+func TestEnchantSearch(t *testing.T) {
+	session := connect(t)
+
+	output := callTool[struct {
+		Enchants []struct {
+			EffectID           int32              `json:"effectId"`
+			Name               string             `json:"name"`
+			Slots              []string           `json:"slots"`
+			RequiredProfession string             `json:"requiredProfession"`
+			Stats              map[string]float64 `json:"stats"`
+		} `json:"enchants"`
+	}](t, session, "db_search_enchants", map[string]any{"slot": "Finger1"})
+
+	if len(output.Enchants) == 0 {
+		t.Fatal("no ring enchants found")
+	}
+	// Ring enchants are enchanter-only, which is exactly the thing a character without the
+	// profession silently loses.
+	var sawEnchanting bool
+	for _, enchant := range output.Enchants {
+		if !contains(enchant.Slots, "Finger1") {
+			t.Errorf("%s does not go on a ring: %v", enchant.Name, enchant.Slots)
+		}
+		if enchant.RequiredProfession == "Enchanting" {
+			sawEnchanting = true
+		}
+	}
+	if !sawEnchanting {
+		t.Error("no ring enchant reported requiring Enchanting")
+	}
+}
+
+func TestGemResource(t *testing.T) {
+	session := connect(t)
+
+	result, err := session.ReadResource(t.Context(), &mcp.ReadResourceParams{URI: "wowsims://gem/34220"})
+	if err != nil {
+		t.Fatalf("read gem: %v", err)
+	}
+	text := result.Contents[0].Text
+	if !strings.Contains(text, "Chaotic Skyfire") || !strings.Contains(text, "metaRequirement") {
+		t.Errorf("gem resource is missing its name or requirement: %.200s", text)
+	}
+
+	if _, err := session.ReadResource(t.Context(), &mcp.ReadResourceParams{URI: "wowsims://gem/999999999"}); err == nil {
+		t.Error("expected an error for an unknown gem")
+	}
+}
