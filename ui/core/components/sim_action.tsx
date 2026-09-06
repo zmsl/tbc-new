@@ -1,6 +1,7 @@
 import { reportSimDone, reportSimProgress, setTitlebarDps } from '../desktop';
 import clsx from 'clsx';
 import tippy from 'tippy.js';
+import { ref } from 'tsx-vanilla';
 
 import i18n from '../../i18n/config.js';
 import { translateResultMetricLabel, translateResultMetricTooltip } from '../../i18n/localization';
@@ -186,9 +187,12 @@ export class SimResultsManager {
 
 		this.currentChangeEmitter.emit(eventID);
 
+		const debugLine = ref<HTMLDivElement>();
+
 		this.simUI.resultsViewer.setContent(
 			<div className="results-sim">
 				{SimResultsManager.makeToplineResultsContent(simResult, undefined, { asList: true })}
+				<div ref={debugLine} className="results-sim-debug form-text" hidden></div>
 				<div className="results-sim-reference">
 					<button className="results-sim-set-reference">
 						<i className={`fa fa-map-pin fa-lg text-${this.simUI.config.cssScheme} me-2`} />
@@ -207,6 +211,32 @@ export class SimResultsManager {
 				</div>
 			</div>,
 		);
+
+		// How long the run actually took, which the result itself cannot say: avgIterationDuration
+		// is simulated fight length, not machine time. Behind Debug Mode because it is a number
+		// for whoever is tuning the sim, not for whoever is tuning their gear.
+		// wallClockMs is 0 for a result rebuilt from a saved proto -- it was not run just now, and
+		// reporting "0.00s" for it would be worse than saying nothing.
+		if (debugLine.value && simResult.wallClockMs > 0) {
+			const elem = debugLine.value;
+			const seconds = simResult.wallClockMs / 1000;
+			const iterations = simResult.iterations;
+			const perSecond = seconds > 0 ? Math.round(iterations / seconds) : 0;
+			elem.textContent = i18n.t('sidebar.results.debug.iterations_timing', {
+				iterations: iterations.toLocaleString(),
+				seconds: seconds.toFixed(2),
+				rate: perSecond.toLocaleString(),
+			});
+
+			const syncVisibility = () => {
+				elem.hidden = !this.simUI.sim.getDebugMode();
+			};
+			syncVisibility();
+			// Toggling the setting updates the line that is already on screen, rather than
+			// leaving it stale until the next run.
+			const subscription = this.simUI.sim.debugModeChangeEmitter.on(syncVisibility);
+			this.addOnResetCallback(() => subscription.dispose());
+		}
 
 		const setResultTooltip = (selector: string, content: Element | HTMLElement | string) => {
 			const resultDivElem = this.simUI.resultsViewer.contentElem.querySelector<HTMLElement>(selector);

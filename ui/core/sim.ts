@@ -60,6 +60,7 @@ export type RunSimOptions = {
 const WASM_CONCURRENCY_STORAGE_KEY = `${LOCAL_STORAGE_PREFIX}_wasmconcurrency`;
 const WASM_CONCURRENCY_UNLOCKED_STORAGE_KEY = `${LOCAL_STORAGE_PREFIX}_wasmconcurrencyunlocked`;
 const ALLOW_PRERELEASE_STORAGE_KEY = `${LOCAL_STORAGE_PREFIX}_allowprerelease`;
+const DEBUG_MODE_STORAGE_KEY = `${LOCAL_STORAGE_PREFIX}_debugmode`;
 
 // Core Sim module which deals only with api types, no UI-related stuff.
 // The backend needs an inactive meta gem left in its socket so the item's socket bonus still
@@ -90,6 +91,7 @@ export class Sim {
 	private wasmConcurrency = 0;
 	private wasmConcurrencyUnlocked = false;
 	private allowPrerelease = false;
+	private debugMode = false;
 	private showQuickSwap = true;
 	private showEPValues = false;
 	private language = '';
@@ -113,6 +115,7 @@ export class Sim {
 	readonly wasmConcurrencyChangeEmitter = new TypedEvent<void>();
 	readonly wasmConcurrencyUnlockedChangeEmitter = new TypedEvent<void>();
 	readonly allowPrereleaseChangeEmitter = new TypedEvent<void>();
+	readonly debugModeChangeEmitter = new TypedEvent<void>();
 	readonly showQuickSwapChangeEmitter = new TypedEvent<void>();
 	readonly showEPValuesChangeEmitter = new TypedEvent<void>();
 	readonly languageChangeEmitter = new TypedEvent<void>();
@@ -174,6 +177,8 @@ export class Sim {
 		this.allowPrerelease = window.localStorage.getItem(ALLOW_PRERELEASE_STORAGE_KEY) === 'true';
 		setAllowPrerelease(this.allowPrerelease);
 
+		this.debugMode = window.localStorage.getItem(DEBUG_MODE_STORAGE_KEY) === 'true';
+
 		this.signalManager = new SimSignalManager();
 
 		this._initPromise = Database.get().then(db => {
@@ -195,6 +200,7 @@ export class Sim {
 			this.wasmConcurrencyChangeEmitter,
 			this.wasmConcurrencyUnlockedChangeEmitter,
 			this.allowPrereleaseChangeEmitter,
+			this.debugModeChangeEmitter,
 			this.showQuickSwapChangeEmitter,
 			this.showEPValuesChangeEmitter,
 			this.languageChangeEmitter,
@@ -303,18 +309,22 @@ export class Sim {
 			const request = this.makeRaidSimRequest(false);
 
 			let result;
+			// Timed around the worker call only, so it measures the sim rather than the result
+			// parsing and DOM work that follows it.
+			const startedAt = performance.now();
 			// Only use worker base concurrency when running wasm. Local sim has native threading.
 			if (await this.shouldUseWasmConcurrency()) {
 				result = await runConcurrentSim(request, this.workerPool, onProgress, signals);
 			} else {
 				result = await this.workerPool.raidSimAsync(request, onProgress, signals);
 			}
+			const wallClockMs = performance.now() - startedAt;
 
 			if (result.error) {
 				if (result.error.type != ErrorOutcomeType.ErrorOutcomeError) return result.error;
 				throw new SimError(result.error.message);
 			}
-			const simResult = await SimResult.makeNew(request, result);
+			const simResult = await SimResult.makeNew(request, result, wallClockMs);
 			if (!options.silent) {
 				this.simResultEmitter.emit(eventID, simResult);
 			}
@@ -389,11 +399,13 @@ export class Sim {
 			await this.waitForInit();
 
 			const request = this.makeRaidSimRequest(true);
+			const startedAt = performance.now();
 			const result = await this.workerPool.raidSimAsync(request, noop, signals);
+			const wallClockMs = performance.now() - startedAt;
 			if (result.error) {
 				throw new SimError(result.error.message);
 			}
-			const simResult = await SimResult.makeNew(request, result);
+			const simResult = await SimResult.makeNew(request, result, wallClockMs);
 			if (!options.silent) {
 				this.simResultEmitter.emit(eventID, simResult);
 			}
@@ -705,6 +717,17 @@ export class Sim {
 		window.localStorage.setItem(ALLOW_PRERELEASE_STORAGE_KEY, newValue.toString());
 		setAllowPrerelease(newValue);
 		this.allowPrereleaseChangeEmitter.emit(eventID);
+	}
+
+	getDebugMode(): boolean {
+		return this.debugMode;
+	}
+	setDebugMode(eventID: EventID, newValue: boolean) {
+		if (newValue == this.debugMode) return;
+
+		this.debugMode = newValue;
+		window.localStorage.setItem(DEBUG_MODE_STORAGE_KEY, newValue.toString());
+		this.debugModeChangeEmitter.emit(eventID);
 	}
 
 	getWasmConcurrencyUnlocked(): boolean {

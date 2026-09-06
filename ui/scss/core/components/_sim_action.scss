@@ -37,6 +37,14 @@
 		}
 	}
 
+	// Diagnostic line under the topline metrics, shown only in Debug Mode. Sits above the
+	// reference controls and borrows their spacing so the panel keeps one rhythm.
+	.results-sim-debug {
+		margin-top: var(--spacer-2);
+		font-weight: normal;
+		opacity: 0.75;
+	}
+
 	.results-sim-reference {
 		margin-top: var(--spacer-2);
 		font-weight: normal;
