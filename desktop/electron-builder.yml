@@ -40,9 +40,15 @@ win:
       to: wowsimtbc.exe
 
 nsis:
-  oneClick: false
+  # A one-click install, the way Discord and Slack do it: no wizard, no questions, and the app
+  # opens when it finishes. perMachine stays false so this lands in %LOCALAPPDATA%\Programs
+  # without an admin prompt -- which is also what lets electron-updater replace files later
+  # without one. A per-machine install would raise UAC on every single update.
+  #
+  # allowToChangeInstallationDirectory is deliberately absent: it is only valid for an assisted
+  # installer, and electron-builder rejects the pair.
+  oneClick: true
   perMachine: false
-  allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
   shortcutName: WoWSims TBC

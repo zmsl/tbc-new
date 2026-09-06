@@ -69,6 +69,11 @@ jobs:
 
     # Installers must be built on their own platform: dmg creation needs macOS, and building
     # NSIS on Windows keeps the door open for code signing later.
+    #
+    # The architectures are named explicitly. Passing targets on the command line replaces the
+    # target block in electron-builder.yml, arch list included, and what is left is the runner's
+    # own architecture -- which is how the Intel mac build silently disappeared when the hosted
+    # macOS runners moved to Apple Silicon.
     package:
         needs: sidecars
         strategy:
@@ -76,10 +81,10 @@ jobs:
             matrix:
                 include:
                     - os: windows-latest
-                      args: --win nsis
+                      args: --win nsis --x64
                       artifacts: desktop-dist/*.exe,desktop-dist/*.blockmap,desktop-dist/latest.yml
                     - os: macos-latest
-                      args: --mac dmg zip
+                      args: --mac dmg zip --x64 --arm64
                       artifacts: desktop-dist/*.dmg,desktop-dist/*.zip,desktop-dist/*.blockmap,desktop-dist/latest-mac.yml
         runs-on: ${{ matrix.os }}
         steps:
